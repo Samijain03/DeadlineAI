@@ -1,47 +1,153 @@
-import React from 'react';
+import React, { useState } from 'react';
+import Navbar from './components/Navbar';
+import AuthModal from './components/AuthModal';
+import Dashboard from './pages/Dashboard';
+import UploadStudio from './pages/UploadStudio';
+import Reminders from './pages/Reminders';
+import AdminPortal from './pages/AdminPortal';
+
+const INITIAL_NOTICES = [
+  {
+    id: 1,
+    title: "Semester End Examination Registration & Form Submission",
+    category: "Examination",
+    actionRequired: "Fill online exam form on portal and submit receipt copy to department head.",
+    dueDate: "2026-08-28",
+    priority: "High",
+    eligibility: "Minimum 75% overall attendance required",
+    status: "Upcoming",
+    reminderSet: true,
+    fileType: "PDF Document"
+  },
+  {
+    id: 2,
+    title: "Mini-Project Final Synopsis & Code Repository Submission",
+    category: "Assignment",
+    actionRequired: "Push complete source code to GitHub and upload PDF report link.",
+    dueDate: "2026-08-28",
+    priority: "High",
+    eligibility: "All enrolled B.Tech / MCA computer science students",
+    status: "Upcoming",
+    reminderSet: false,
+    fileType: "PNG Image"
+  },
+  {
+    id: 3,
+    title: "MahaDBT State Merit Scholarship Renewal Application",
+    category: "Scholarship",
+    actionRequired: "Attach income certificate & previous sem marksheets at Counter #4.",
+    dueDate: "2026-09-05",
+    priority: "Medium",
+    eligibility: "GPA > 8.0 & verified family income certificate",
+    status: "Upcoming",
+    reminderSet: true,
+    fileType: "JPG Document"
+  }
+];
+
+const INITIAL_REMINDERS = [
+  { id: 101, title: "Semester End Exam Registration", channel: "Email & Push", triggerDate: "2026-08-26 • 09:00 AM", status: "Active" },
+  { id: 102, title: "MahaDBT State Merit Scholarship Renewal", channel: "Email Only", triggerDate: "2026-09-03 • 10:00 AM", status: "Active" }
+];
+
+const CATEGORIES = ["Examination", "Assignment", "Fees", "Events", "Scholarship", "Registration", "Placement", "General"];
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  
+  // DEFAULT STATE: LOGGED OUT
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  const [notices, setNotices] = useState(INITIAL_NOTICES);
+  const [reminders, setReminders] = useState(INITIAL_REMINDERS);
+  const [categoryList, setCategoryList] = useState(CATEGORIES);
+
+  const handleToggleDone = (id) => {
+    setNotices(notices.map(n => n.id === id ? { ...n, status: n.status === "Completed" ? "Upcoming" : "Completed" } : n));
+  };
+
+  const handleToggleReminder = (notice) => {
+    const exists = reminders.find(r => r.title === notice.title);
+    if (exists) {
+      setReminders(reminders.filter(r => r.title !== notice.title));
+      setNotices(notices.map(n => n.id === notice.id ? { ...n, reminderSet: false } : n));
+    } else {
+      const newRem = {
+        id: Date.now(),
+        title: notice.title,
+        channel: "Email & Push",
+        triggerDate: `${notice.dueDate} • 09:00 AM`,
+        status: "Active"
+      };
+      setReminders([...reminders, newRem]);
+      setNotices(notices.map(n => n.id === notice.id ? { ...n, reminderSet: true } : n));
+    }
+  };
+
+  const handleAddNotice = (newNotice) => {
+    setNotices([newNotice, ...notices]);
+  };
+
+  const handleAddCategory = (newCat) => {
+    if (!categoryList.includes(newCat)) {
+      setCategoryList([...categoryList, newCat]);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-900 text-white font-sans">
-      {/* Navbar */}
-      <nav className="border-b border-slate-800 bg-slate-950 px-6 py-4 flex justify-between items-center">
-        <h1 className="text-xl font-bold tracking-wide text-indigo-400">DeadlineAI</h1>
-        <div className="space-x-4 text-sm text-slate-300">
-          <button className="hover:text-white">Dashboard</button>
-          <button className="hover:text-white">Upload Notice</button>
-          <button className="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-md font-medium text-white">Sign In</button>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-amber-500 selection:text-black">
+      <div className="h-1 bg-gradient-to-r from-red-600 via-amber-500 to-red-600 shadow-[0_0_15px_rgba(245,158,11,0.5)]"></div>
 
-      {/* Main Container */}
-      <main className="max-w-6xl mx-auto p-6 space-y-8">
-        <header className="space-y-1">
-          <h2 className="text-2xl font-semibold">Academic Dashboard</h2>
-          <p className="text-slate-400 text-sm">Track your extracted deadlines and pending actions.</p>
-        </header>
+      <Navbar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        isAuthenticated={isAuthenticated} 
+        setIsAuthenticated={setIsAuthenticated} 
+        setShowAuthModal={setShowAuthModal}
+        reminderCount={reminders.length}
+      />
 
-        {/* Dashboard Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-slate-800 border border-slate-700 p-5 rounded-lg">
-            <p className="text-slate-400 text-xs font-semibold uppercase">Upcoming Deadlines</p>
-            <p className="text-3xl font-bold mt-2">0</p>
-          </div>
-          <div className="bg-slate-800 border border-slate-700 p-5 rounded-lg">
-            <p className="text-slate-400 text-xs font-semibold uppercase">Pending Actions</p>
-            <p className="text-3xl font-bold mt-2">0</p>
-          </div>
-          <div className="bg-slate-800 border border-slate-700 p-5 rounded-lg">
-            <p className="text-slate-400 text-xs font-semibold uppercase">Completed Tasks</p>
-            <p className="text-3xl font-bold mt-2">0</p>
-          </div>
-        </div>
+      {activeTab === 'dashboard' && (
+        <Dashboard 
+          notices={notices}
+          reminders={reminders}
+          categoryList={categoryList}
+          onToggleDone={handleToggleDone}
+          onToggleReminder={handleToggleReminder}
+          onNavigateUpload={() => setActiveTab('upload')}
+          isAuthenticated={isAuthenticated}
+          onPromptAuth={() => setShowAuthModal(true)}
+        />
+      )}
 
-        {/* Notice Upload Placeholder */}
-        <div className="border-2 border-dashed border-slate-700 rounded-lg p-8 text-center hover:border-indigo-500 transition cursor-pointer">
-          <p className="text-slate-300 font-medium">Drag & drop your notice document (PDF, PNG, JPG)</p>
-          <p className="text-xs text-slate-500 mt-1">Upload notices to extract deadlines automatically</p>
-        </div>
-      </main>
+      {activeTab === 'upload' && (
+        <UploadStudio 
+          categoryList={categoryList}
+          onAddNotice={handleAddNotice}
+          onNavigateDashboard={() => setActiveTab('dashboard')}
+        />
+      )}
+
+      {activeTab === 'reminders' && (
+        <Reminders 
+          reminders={reminders}
+          onCancelReminder={(id) => setReminders(reminders.filter(r => r.id !== id))}
+        />
+      )}
+
+      {activeTab === 'admin' && (
+        <AdminPortal 
+          categoryList={categoryList}
+          onAddCategory={handleAddCategory}
+        />
+      )}
+
+      <AuthModal 
+        show={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={() => setIsAuthenticated(true)}
+      />
     </div>
   );
 }
