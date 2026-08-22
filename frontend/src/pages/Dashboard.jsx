@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { 
   LayoutGrid, Kanban, Calendar, Table, Search, Plus, 
   AlertTriangle, Clock, CheckCircle, Bell, Eye, Download, 
-  Sparkles, ShieldCheck, ChevronRight, ShieldAlert, ArrowUpRight
+  Sparkles, ShieldCheck, ChevronRight, ShieldAlert, ArrowUpRight,
+  Share2, Bot
 } from 'lucide-react';
 import KanbanView from '../components/KanbanView';
 import CalendarView from '../components/CalendarView';
 import TableView from '../components/TableView';
+import { noticeService } from '../services/noticeService';
 
 export default function Dashboard({ 
   notices, 
@@ -459,10 +461,33 @@ export default function Dashboard({
                           <button
                             onClick={() => onSelectNotice(notice)}
                             className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-zinc-100 text-xs font-bold flex items-center space-x-1.5 transition"
-                            title="Inspect full details & OCR text"
+                            title="Inspect details & Ask AI"
                           >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Details</span>
+                            <Bot className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Ask AI / Details</span>
+                          </button>
+
+                          <button 
+                            onClick={() => {
+                              const url = noticeService.getGoogleCalendarUrl(notice);
+                              window.open(url, '_blank');
+                              if (onNotify) onNotify("Google Calendar Opened", "Event created in new tab.", "info");
+                            }}
+                            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-amber-400 hover:text-amber-300 transition"
+                            title="Add to Google Calendar"
+                          >
+                            <Calendar className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button 
+                            onClick={() => {
+                              const url = noticeService.getWhatsAppShareUrl(notice);
+                              window.open(url, '_blank');
+                            }}
+                            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-emerald-600/60 text-emerald-400 transition"
+                            title="Share to WhatsApp"
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
                           </button>
 
                           <button 
@@ -482,7 +507,7 @@ export default function Dashboard({
                             className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center space-x-1.5 ${
                               isCompleted
                                 ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.25)]'
+                                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md'
                             }`}
                           >
                             <CheckCircle className="w-3.5 h-3.5" />

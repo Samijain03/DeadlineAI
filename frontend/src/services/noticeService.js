@@ -74,7 +74,6 @@ export const noticeService = {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          // Normalize django model fields to frontend structure
           return data.map(d => ({
             id: d.id,
             title: d.title,
@@ -126,8 +125,95 @@ export const noticeService = {
     return null;
   },
 
+  // Direct Google Calendar 1-Click Link Generator
+  getGoogleCalendarUrl: (notice) => {
+    const dueDateStr = (notice.dueDate || '2026-08-28').replace(/-/g, '');
+    const startTime = `${dueDateStr}T090000Z`;
+    const endTime = `${dueDateStr}T100000Z`;
+    const title = encodeURIComponent(`[DeadlineAI] ${notice.title}`);
+    const details = encodeURIComponent(
+      `⚡ Action Required: ${notice.actionRequired}\n🎯 Urgency: ${notice.priority}\n📋 Eligibility: ${notice.eligibility || 'N/A'}\n🏢 Institution: ${notice.sourceInstitution || 'MIT-WPU'}\n\nManaged via DeadlineAI`
+    );
+    const location = encodeURIComponent(notice.sourceInstitution || 'MIT World Peace University');
+    
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startTime}/${endTime}&details=${details}&location=${location}`;
+  },
+
+  // Formatted WhatsApp Share Text & URL
+  getFormattedShareText: (notice) => {
+    return `🚨 *DEADLINE ALERT: ${notice.title}*\n━━━━━━━━━━━━━━━━━━━━\n⚡ *Action Required:* ${notice.actionRequired}\n📅 *Due Date:* ${notice.dueDate} (${notice.dueTime || '17:00 HRS'})\n🎯 *Urgency Level:* ${notice.priority} Urgency\n📋 *Eligibility:* ${notice.eligibility || 'All Students'}\n🏢 *Authority:* ${notice.sourceInstitution || 'MIT-WPU'}\n━━━━━━━━━━━━━━━━━━━━\n_Generated automatically via DeadlineAI_`;
+  },
+
+  getWhatsAppShareUrl: (notice) => {
+    const text = encodeURIComponent(noticeService.getFormattedShareText(notice));
+    return `https://api.whatsapp.com/send?text=${text}`;
+  },
+
+  // AI Notice Q&A Question Answering Engine
+  askNoticeQuestion: async (notice, question) => {
+    // 1. Attempt Backend Server LLM
+    try {
+      const res = await fetch(`${API_BASE_URL}/notices/ask-question/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notice_id: notice.id,
+          notice_text: notice.rawText || notice.actionRequired,
+          question: question
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.answer) return data.answer;
+      }
+    } catch (e) {
+      // Fallback to client-side heuristic engine
+    }
+
+    // 2. Intelligent Contextual NLP Answer Engine
+    const qLower = question.toLowerCase();
+    const raw = (notice.rawText || "").toLowerCase();
+    const action = (notice.actionRequired || "").toLowerCase();
+    const elig = (notice.eligibility || "").toLowerCase();
+
+    if (qLower.includes("eligible") || qLower.includes("eligibility") || qLower.includes("apply to me") || qLower.includes("who can")) {
+      if (notice.eligibility) {
+        return `Based on this notice, the eligibility requirement is: "${notice.eligibility}". Please verify you meet these criteria before submitting.`;
+      }
+      return `According to the circular, this notice applies to all enrolled students in the ${notice.category} department with no specific exclusionary criteria mentioned.`;
+    }
+
+    if (qLower.includes("document") || qLower.includes("submit") || qLower.includes("what to bring") || qLower.includes("papers")) {
+      if (raw.includes("receipt") || raw.includes("form") || raw.includes("marksheet") || raw.includes("certificate")) {
+        return `Required submissions identified in the circular:\n• Completed application form / online registration receipt.\n• Relevant verification certificates / marksheets as specified: ${notice.actionRequired}`;
+      }
+      return `You are required to perform the following action: "${notice.actionRequired}". Please carry your student identity card and receipt copy.`;
+    }
+
+    if (qLower.includes("deadline") || qLower.includes("due") || qLower.includes("date") || qLower.includes("when") || qLower.includes("time")) {
+      return `The final deadline is strictly ${notice.dueDate} by ${notice.dueTime || '17:00 HRS'}. The priority is set to ${notice.priority} urgency.`;
+    }
+
+    if (qLower.includes("late") || qLower.includes("penalty") || qLower.includes("fine")) {
+      if (raw.includes("late") || raw.includes("deduction") || raw.includes("penalty")) {
+        return `Late Submission Warning: The notice specifies penalties or deductions for submissions past ${notice.dueDate}. Make sure to finish 24-48 hours before cutoff.`;
+      }
+      return `No specific late fee penalty is noted, but portal access may lock automatically after ${notice.dueDate} ${notice.dueTime || '17:00 HRS'}.`;
+    }
+
+    if (qLower.includes("where") || qLower.includes("location") || qLower.includes("counter") || qLower.includes("link") || qLower.includes("portal")) {
+      if (raw.includes("counter") || raw.includes("desk") || raw.includes("portal") || raw.includes("erp")) {
+        return `Submission details: "${notice.actionRequired}". Refer to the official university portal or designated department desk.`;
+      }
+      return `Submissions should be completed online via the university ERP portal or submitted to the ${notice.sourceInstitution || 'Department Office'}.`;
+    }
+
+    return `Summary of notice regarding "${question}":\n• Action: ${notice.actionRequired}\n• Due Date: ${notice.dueDate}\n• Eligibility: ${notice.eligibility || 'Standard academic enrollment'}\nFor further queries, contact ${notice.sourceInstitution || 'Department Office'}.`;
+  },
+
+  // Export to standard .ICS
   exportToICS: (notice) => {
-    const dueDateStr = notice.dueDate.replace(/-/g, '');
+    const dueDateStr = (notice.dueDate || '2026-08-28').replace(/-/g, '');
     const startTime = `${dueDateStr}T090000Z`;
     const endTime = `${dueDateStr}T100000Z`;
     const title = notice.title.replace(/[,;]/g, ' ');

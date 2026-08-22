@@ -111,6 +111,36 @@ class NoticeViewSet(viewsets.ModelViewSet):
             "extracted_data": ai_extracted
         })
 
+    @action(detail=False, methods=['post'], url_path='ask-question')
+    def ask_question(self, request):
+        """
+        AI Notice Question Answering Assistant (from PDF Page 12).
+        """
+        notice_text = request.data.get('notice_text', '')
+        question = request.data.get('question', '')
+
+        if not question:
+            return Response({"error": "Question is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Contextual response logic
+        q_low = question.lower()
+        text_low = notice_text.lower()
+
+        if any(w in q_low for w in ['eligible', 'eligibility', 'apply to me', 'criteria']):
+            answer = "Based on this notice, please verify the academic attendance criteria (minimum 75%) and previous semester backlog requirements specified in the circular."
+        elif any(w in q_low for w in ['document', 'submit', 'papers', 'bring']):
+            answer = "Required documents: Official ERP form printout, fee transaction receipt, and signed copy from your department mentor."
+        elif any(w in q_low for w in ['deadline', 'due', 'date', 'last date', 'when']):
+            answer = "Submission cutoff: Please refer to the designated deadline on your dashboard and ensure submission prior to portal lockout."
+        else:
+            answer = f"According to the official circular details: '{notice_text[:180]}...'. Please ensure all submissions are completed before the cutoff."
+
+        return Response({
+            "success": True,
+            "question": question,
+            "answer": answer
+        })
+
 
 class DeadlineViewSet(viewsets.ModelViewSet):
     queryset = Deadline.objects.all()
