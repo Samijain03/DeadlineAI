@@ -1,5 +1,7 @@
 import { INITIAL_CATEGORIES, SAMPLE_NOTICES, INITIAL_REMINDERS } from './mockData';
 
+const API_BASE_URL = 'http://localhost:8000/api';
+
 const STORAGE_KEYS = {
   NOTICES: 'deadlineai_notices_v2',
   REMINDERS: 'deadlineai_reminders_v2',
@@ -7,8 +9,8 @@ const STORAGE_KEYS = {
   USER: 'deadlineai_user_v2'
 };
 
-// Data service abstraction layer (Ready to plug into Django REST APIs)
 export const noticeService = {
+  // Sync local retrieval with fallback
   getNotices: () => {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.NOTICES);
@@ -61,6 +63,67 @@ export const noticeService = {
     } catch (e) {
       console.warn("Storage save error:", e);
     }
+  },
+
+  // Backend Django API Connector Methods (with auto-fallback)
+  fetchBackendDeadlines: async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/deadlines/`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          // Normalize django model fields to frontend structure
+          return data.map(d => ({
+            id: d.id,
+            title: d.title,
+            category: d.category,
+            actionRequired: d.action_required,
+            dueDate: d.due_date,
+            dueTime: d.due_time || '17:00',
+            priority: d.priority,
+            eligibility: d.eligibility,
+            status: d.status,
+            reminderSet: d.reminder_set,
+            fileType: d.file_type || 'PDF Document',
+            fileName: d.file_name,
+            rawText: d.raw_text,
+            notes: d.notes,
+            sourceInstitution: d.source_institution,
+            extractedConfidence: d.extracted_confidence
+          }));
+        }
+      }
+    } catch (err) {
+      console.info("Backend API not reachable; operating in local mode.");
+    }
+    return noticeService.getNotices();
+  },
+
+  parseDocumentOnBackend: async (fileOrTextPayload) => {
+    try {
+      let options = {};
+      if (fileOrTextPayload instanceof FormData) {
+        options = {
+          method: 'POST',
+          body: fileOrTextPayload
+        };
+      } else {
+        options = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fileOrTextPayload)
+        };
+      }
+      const res = await fetch(`${API_BASE_URL}/notices/parse-document/`, options);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn("Backend parse endpoint offline:", err);
+    }
+    return null;
   },
 
   exportToICS: (notice) => {

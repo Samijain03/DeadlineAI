@@ -3,6 +3,7 @@ import Navbar from './components/Navbar';
 import AuthModal from './components/AuthModal';
 import NoticeDetailModal from './components/NoticeDetailModal';
 import Toast from './components/Toast';
+import HomePage from './pages/HomePage';
 import Dashboard from './pages/Dashboard';
 import UploadStudio from './pages/UploadStudio';
 import ConflictRadar from './components/ConflictRadar';
@@ -12,13 +13,12 @@ import AdminPortal from './pages/AdminPortal';
 import { noticeService } from './services/noticeService';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  
-  // Auth state (Samay Jain, MIT-WPU)
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  // DEFAULT STATE: LOGGED OUT & LANDING ON HOME PAGE
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [activeTab, setActiveTab] = useState('home'); // 'home', 'dashboard', 'upload', 'conflicts', 'reminders', 'analytics', 'admin'
   const [showAuthModal, setShowAuthModal] = useState(false);
 
-  // Core data states loaded from noticeService with persistence
+  // Core data states loaded from noticeService
   const [notices, setNotices] = useState(() => noticeService.getNotices());
   const [reminders, setReminders] = useState(() => noticeService.getReminders());
   const [categoryList, setCategoryList] = useState(() => noticeService.getCategories());
@@ -148,6 +148,11 @@ export default function App() {
     );
   };
 
+  const handleAuthSuccess = () => {
+    setIsAuthenticated(true);
+    setActiveTab('dashboard');
+  };
+
   // Compute active conflict clusters count
   const activeNotices = notices.filter(n => n.status !== 'Completed');
   const dateCounts = {};
@@ -158,7 +163,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-amber-500 selection:text-black">
-      {/* Sleek top glowing border line */}
+      {/* Top glowing accent bar */}
       <div className="h-1 bg-gradient-to-r from-red-600 via-amber-500 to-cyan-500 shadow-[0_0_20px_rgba(245,158,11,0.5)]"></div>
 
       {/* Navigation Header */}
@@ -180,6 +185,14 @@ export default function App() {
       />
 
       {/* Dynamic Tab Views */}
+      {activeTab === 'home' && (
+        <HomePage 
+          onSignIn={() => setShowAuthModal(true)}
+          onExploreDemo={() => setActiveTab('dashboard')}
+          onNavigateTab={setActiveTab}
+        />
+      )}
+
       {activeTab === 'dashboard' && (
         <Dashboard 
           notices={notices}
@@ -242,7 +255,7 @@ export default function App() {
         />
       )}
 
-      {/* Inspect Notice Drawer / Modal */}
+      {/* Notice Detail Drawer / Modal */}
       <NoticeDetailModal 
         notice={selectedNotice}
         onClose={() => setSelectedNotice(null)}
@@ -255,7 +268,7 @@ export default function App() {
       <AuthModal 
         show={showAuthModal}
         onClose={() => setShowAuthModal(false)}
-        onSuccess={() => setIsAuthenticated(true)}
+        onSuccess={handleAuthSuccess}
         onNotify={addToast}
       />
 

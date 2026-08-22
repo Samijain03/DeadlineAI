@@ -2,12 +2,11 @@ import React, { useState } from 'react';
 import { 
   LayoutGrid, Kanban, Calendar, Table, Search, Plus, 
   AlertTriangle, Clock, CheckCircle, Bell, Eye, Download, 
-  Filter, Sparkles, ShieldCheck, ChevronRight, FileText
+  Sparkles, ShieldCheck, ChevronRight, ShieldAlert, ArrowUpRight
 } from 'lucide-react';
 import KanbanView from '../components/KanbanView';
 import CalendarView from '../components/CalendarView';
 import TableView from '../components/TableView';
-import { noticeService } from '../services/noticeService';
 
 export default function Dashboard({ 
   notices, 
@@ -27,7 +26,7 @@ export default function Dashboard({
   const [viewMode, setViewMode] = useState('stream'); // 'stream', 'kanban', 'calendar', 'table'
   const [selectedCat, setSelectedCat] = useState("All");
   const [selectedPriority, setSelectedPriority] = useState("All");
-  const [statusFilter, setStatusFilter] = useState("All"); // "All", "Upcoming", "Completed"
+  const [statusFilter, setStatusFilter] = useState("All"); // "All", "Upcoming", "Completed", "Missed"
 
   // Filter notices
   const filteredNotices = notices.filter(item => {
@@ -44,59 +43,59 @@ export default function Dashboard({
     return matchesCat && matchesPri && matchesStatus && matchesSearch;
   });
 
-  // Conflict calculation
   const highUrgencyCount = notices.filter(d => d.priority === 'High' && d.status !== 'Completed').length;
-  const activeCount = notices.filter(d => d.status !== 'Completed').length;
+  const activeCount = notices.filter(d => d.status === 'Upcoming').length;
   const completedCount = notices.filter(d => d.status === 'Completed').length;
+  const missedCount = notices.filter(d => d.status === 'Missed').length;
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-8 py-8 space-y-8 animate-fadeIn">
       
-      {/* Guest Mode Banner */}
+      {/* Top Banner for Guests */}
       {!isAuthenticated && (
         <div className="bg-gradient-to-r from-amber-500/15 via-zinc-900 to-zinc-950 border border-amber-500/40 p-4 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-amber-500/20 rounded-xl text-amber-400">
+            <div className="p-2 bg-amber-500/20 rounded-2xl text-amber-400">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
               <p className="text-xs text-amber-200 font-medium">
-                You are currently viewing in <strong className="font-extrabold text-amber-400">Student Guest Mode</strong>.
+                Viewing in <strong className="font-extrabold text-amber-400">Student Preview Mode</strong>.
               </p>
               <p className="text-[11px] text-zinc-400">
-                Sign in to sync extracted notices to your university account and activate WhatsApp alerts.
+                Sign in to save your personal notices and activate WhatsApp alerts.
               </p>
             </div>
           </div>
           <button 
             onClick={onPromptAuth}
-            className="bg-amber-500 hover:bg-amber-400 text-black text-xs font-black px-5 py-2.5 rounded-xl transition uppercase tracking-wider shrink-0 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+            className="bg-amber-500 hover:bg-amber-400 text-black text-xs font-black px-5 py-2.5 rounded-xl transition uppercase tracking-wider shrink-0 shadow-md"
           >
-            Sign In / Register
+            Sign In Now
           </button>
         </div>
       )}
 
       {/* USP: Smart Deadline Conflict Warning Banner */}
       {highUrgencyCount > 1 && (
-        <div className="border border-red-600/50 bg-gradient-to-r from-red-950/70 via-zinc-900 to-zinc-950 p-5 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-[0_0_25px_rgba(220,38,38,0.15)] relative overflow-hidden">
+        <div className="border border-red-600/40 bg-gradient-to-r from-red-950/60 via-zinc-900 to-zinc-950 p-5 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl relative overflow-hidden">
           <div className="w-1.5 h-full bg-red-600 absolute left-0 top-0"></div>
           
           <div className="flex items-start space-x-4">
             <div className="p-3 bg-red-600/20 rounded-2xl border border-red-500/40 text-red-400 shrink-0 mt-0.5">
-              <AlertTriangle className="w-6 h-6 animate-pulse" />
+              <ShieldAlert className="w-6 h-6 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
                 <h3 className="text-sm font-black text-red-400 uppercase tracking-wider">
-                  Smart Deadline Conflict Alert
+                  Smart Conflict Radar Warning
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-red-950 text-red-300 border border-red-800 uppercase font-mono">
-                  High Congestion
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-red-950 text-red-300 border border-red-800 uppercase">
+                  Clash Detected
                 </span>
               </div>
               <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
-                You have <strong className="text-amber-400">{highUrgencyCount} High-Urgency tasks</strong> due around <span className="text-white font-mono font-bold">28 August 2026</span> (Exam Form & Mini-Project).
+                You have <strong className="text-amber-400">{highUrgencyCount} High-Urgency deadlines</strong> scheduled simultaneously on <span className="text-white font-mono font-bold">28 August 2026</span> (Exam Form & Mini-Project).
               </p>
             </div>
           </div>
@@ -106,13 +105,13 @@ export default function Dashboard({
               onClick={onNavigateConflicts}
               className="bg-red-950/80 hover:bg-red-900/80 border border-red-800 text-red-300 text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center space-x-1.5"
             >
-              <span>Analyze Clashes</span>
+              <span>Analyze Conflicts</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
 
             <button 
               onClick={onNavigateUpload}
-              className="bg-amber-500 hover:bg-amber-400 text-black text-xs font-black px-4 py-2.5 rounded-xl transition shadow-[0_0_15px_rgba(245,158,11,0.3)] uppercase tracking-wider flex items-center space-x-1.5"
+              className="bg-amber-500 hover:bg-amber-400 text-black text-xs font-black px-4 py-2.5 rounded-xl transition shadow-md uppercase tracking-wider flex items-center space-x-1.5"
             >
               <Plus className="w-4 h-4" />
               <span>Ingest Notice</span>
@@ -121,27 +120,27 @@ export default function Dashboard({
         </div>
       )}
 
-      {/* Analytics KPI Bar */}
+      {/* KPI Counters */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-zinc-950/80 border border-zinc-800/90 p-5 rounded-3xl relative overflow-hidden shadow-lg hover:border-zinc-700 transition">
+        <div className="bg-zinc-950/80 border border-zinc-800 p-5 rounded-3xl relative overflow-hidden shadow-lg">
           <div className="w-1 h-full bg-amber-500 absolute left-0 top-0"></div>
           <div className="flex items-center justify-between text-zinc-500 text-[10px] font-black uppercase tracking-widest">
-            <span>Active Deadlines</span>
+            <span>Upcoming</span>
             <Clock className="w-4 h-4 text-amber-400" />
           </div>
           <p className="text-3xl font-black text-zinc-100 mt-1 font-mono">{activeCount}</p>
         </div>
 
-        <div className="bg-zinc-950/80 border border-zinc-800/90 p-5 rounded-3xl relative overflow-hidden shadow-lg hover:border-zinc-700 transition">
+        <div className="bg-zinc-950/80 border border-zinc-800 p-5 rounded-3xl relative overflow-hidden shadow-lg">
           <div className="w-1 h-full bg-red-600 absolute left-0 top-0"></div>
           <div className="flex items-center justify-between text-zinc-500 text-[10px] font-black uppercase tracking-widest">
-            <span>Critical Urgency</span>
+            <span>High Urgency</span>
             <AlertTriangle className="w-4 h-4 text-red-400" />
           </div>
           <p className="text-3xl font-black text-red-400 mt-1 font-mono">{highUrgencyCount}</p>
         </div>
 
-        <div className="bg-zinc-950/80 border border-zinc-800/90 p-5 rounded-3xl relative overflow-hidden shadow-lg hover:border-zinc-700 transition">
+        <div className="bg-zinc-950/80 border border-zinc-800 p-5 rounded-3xl relative overflow-hidden shadow-lg">
           <div className="w-1 h-full bg-emerald-500 absolute left-0 top-0"></div>
           <div className="flex items-center justify-between text-zinc-500 text-[10px] font-black uppercase tracking-widest">
             <span>Completed</span>
@@ -150,23 +149,22 @@ export default function Dashboard({
           <p className="text-3xl font-black text-emerald-400 mt-1 font-mono">{completedCount}</p>
         </div>
 
-        <div className="bg-zinc-950/80 border border-zinc-800/90 p-5 rounded-3xl relative overflow-hidden shadow-lg hover:border-zinc-700 transition">
+        <div className="bg-zinc-950/80 border border-zinc-800 p-5 rounded-3xl relative overflow-hidden shadow-lg">
           <div className="w-1 h-full bg-cyan-500 absolute left-0 top-0"></div>
           <div className="flex items-center justify-between text-zinc-500 text-[10px] font-black uppercase tracking-widest">
-            <span>Active Alerts</span>
+            <span>Scheduled Alerts</span>
             <Bell className="w-4 h-4 text-cyan-400" />
           </div>
           <p className="text-3xl font-black text-cyan-400 mt-1 font-mono">{reminders.length}</p>
         </div>
       </div>
 
-      {/* Control Bar: Views & Filters */}
+      {/* Control Toolbar */}
       <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-3xl p-5 space-y-4 shadow-xl">
         
-        {/* Top Controls: Search + View Modes + Action */}
+        {/* Search, View Modes & Ingest CTA */}
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
           
-          {/* Search Box */}
           <div className="relative flex-1 max-w-lg">
             <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-zinc-500" />
             <input 
@@ -186,8 +184,7 @@ export default function Dashboard({
             )}
           </div>
 
-          {/* View Switcher Pills */}
-          <div className="flex items-center space-x-1.5 bg-zinc-900 p-1.5 rounded-2xl border border-zinc-800/90 self-start lg:self-auto">
+          <div className="flex items-center space-x-1.5 bg-zinc-900 p-1.5 rounded-2xl border border-zinc-800 self-start lg:self-auto">
             <button
               onClick={() => setViewMode('stream')}
               className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition ${
@@ -239,19 +236,19 @@ export default function Dashboard({
 
           <button
             onClick={onNavigateUpload}
-            className="bg-amber-500 hover:bg-amber-400 text-black text-xs font-black px-4 py-3 rounded-2xl transition shadow-[0_0_15px_rgba(245,158,11,0.25)] flex items-center justify-center space-x-1.5 uppercase tracking-wider shrink-0"
+            className="bg-amber-500 hover:bg-amber-400 text-black text-xs font-black px-4 py-3 rounded-2xl transition shadow-md flex items-center justify-center space-x-1.5 uppercase tracking-wider shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span>Ingest Document</span>
           </button>
         </div>
 
-        {/* Filters Bar: Status + Urgency + Categories */}
+        {/* Filters: 4-Way Status Tabs from PDF (All, Upcoming, Completed, Missed) + Urgency */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2 border-t border-zinc-800/80">
           
           <div className="flex items-center space-x-2 flex-wrap gap-y-2">
             <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mr-1">Status:</span>
-            {["All", "Upcoming", "Completed"].map((st) => (
+            {["All", "Upcoming", "Completed", "Missed"].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
@@ -288,7 +285,7 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* Category Filter Chips */}
+        {/* Category Pills */}
         <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
           {["All", ...categoryList].map((c) => (
             <button
@@ -336,8 +333,8 @@ export default function Dashboard({
       {viewMode === 'stream' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center space-x-2">
-              <span>Parsed Action Stream ({filteredNotices.length})</span>
+            <h2 className="text-xs font-black uppercase tracking-widest text-zinc-400">
+              Parsed Academic Notice Stream ({filteredNotices.length})
             </h2>
           </div>
 
@@ -366,6 +363,7 @@ export default function Dashboard({
             <div className="grid grid-cols-1 gap-5">
               {filteredNotices.map((notice) => {
                 const isCompleted = notice.status === 'Completed';
+                const isMissed = notice.status === 'Missed';
                 const isHigh = notice.priority === 'High';
 
                 return (
@@ -374,6 +372,8 @@ export default function Dashboard({
                     className={`border rounded-3xl p-6 sm:p-7 bg-zinc-950/80 transition-all duration-300 relative group overflow-hidden ${
                       isCompleted 
                         ? 'opacity-55 border-zinc-800/80 bg-zinc-950' 
+                        : isMissed
+                        ? 'border-red-950 bg-zinc-950 opacity-70'
                         : isHigh 
                         ? 'border-red-900/60 shadow-[0_0_25px_rgba(185,28,28,0.09)] hover:border-red-600/70' 
                         : 'border-zinc-800 hover:border-amber-500/50'
@@ -431,12 +431,12 @@ export default function Dashboard({
                           </p>
                         </div>
 
-                        {/* Eligibility & Details */}
+                        {/* Eligibility & Prerequisites */}
                         {notice.eligibility && (
                           <div className="flex items-center space-x-2 text-xs text-zinc-400">
                             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                             <p className="truncate font-mono">
-                              <span className="text-zinc-500 font-bold">Eligibility:</span> {notice.eligibility}
+                              <span className="text-zinc-500 font-bold">Eligibility Constraint:</span> {notice.eligibility}
                             </p>
                           </div>
                         )}
