@@ -13,6 +13,7 @@ class DeadlineAPITestCase(TestCase):
             email='test@mitwpu.edu.in',
             password='testpassword'
         )
+        self.client.force_authenticate(user=self.user)
         self.category = Category.objects.create(name='Examination')
         self.deadline = Deadline.objects.create(
             user=self.user,
@@ -68,3 +69,20 @@ class DeadlineAPITestCase(TestCase):
         self.assertIn('extracted_data', response.data)
         self.assertEqual(response.data['extracted_data']['category'], 'Examination')
         self.assertEqual(response.data['extracted_data']['due_date'], '2026-08-28')
+
+    def test_deadlines_are_private_to_the_authenticated_user(self):
+        other = User.objects.create_user(username='other_student', email='other@example.com')
+        Deadline.objects.create(
+            user=other,
+            title='Private deadline',
+            action_required='Do not expose this row',
+            due_date='2026-10-01',
+        )
+        response = self.client.get('/api/deadlines/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item['title'] for item in response.data], ['Sample Midterm Exam Registration'])
+
+    def test_anonymous_requests_are_rejected(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get('/api/deadlines/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

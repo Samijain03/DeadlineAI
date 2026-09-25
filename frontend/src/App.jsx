@@ -15,7 +15,10 @@ import { noticeService } from './services/noticeService';
 export default function App() {
   // DEFAULT STATE: LOGGED OUT & LANDING ON HOME PAGE
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeTab, setActiveTab] = useState('home'); // 'home', 'dashboard', 'upload', 'conflicts', 'reminders', 'analytics', 'admin'
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'home';
+  });
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Core data states loaded from noticeService

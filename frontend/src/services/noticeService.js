@@ -1,6 +1,5 @@
 import { INITIAL_CATEGORIES, SAMPLE_NOTICES, INITIAL_REMINDERS } from './mockData';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+import { apiFetch } from './apiClient';
 
 const STORAGE_KEYS = {
   NOTICES: 'deadlineai_notices_v2',
@@ -68,11 +67,7 @@ export const noticeService = {
   // Backend Django API Connector Methods (with auto-fallback)
   fetchBackendDeadlines: async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/deadlines/`, {
-        headers: { 'Accept': 'application/json' }
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await apiFetch('/deadlines/');
         if (Array.isArray(data) && data.length > 0) {
           return data.map(d => ({
             id: d.id,
@@ -93,11 +88,11 @@ export const noticeService = {
             extractedConfidence: d.extracted_confidence
           }));
         }
-      }
+        return [];
     } catch (err) {
-      console.info("Backend API not reachable; operating in local mode.");
+      console.info("Backend API not reachable:", err.message);
     }
-    return noticeService.getNotices();
+    return [];
   },
 
   parseDocumentOnBackend: async (fileOrTextPayload) => {
@@ -115,15 +110,36 @@ export const noticeService = {
           body: JSON.stringify(fileOrTextPayload)
         };
       }
-      const res = await fetch(`${API_BASE_URL}/notices/parse-document/`, options);
-      if (res.ok) {
-        return await res.json();
-      }
+      return await apiFetch('/notices/parse-document/', options);
     } catch (err) {
       console.warn("Backend parse endpoint offline:", err);
     }
     return null;
   },
+
+  createDeadline: async (notice) => apiFetch('/deadlines/', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: notice.title,
+      category: notice.category || 'General',
+      action_required: notice.actionRequired,
+      due_date: notice.dueDate,
+      due_time: notice.dueTime || '17:00',
+      priority: notice.priority || 'Medium',
+      eligibility: notice.eligibility || '',
+      status: notice.status || 'Upcoming',
+      reminder_set: Boolean(notice.reminderSet),
+      file_type: notice.fileType || 'Notice',
+      file_name: notice.fileName || '',
+      raw_text: notice.rawText || '',
+      source_institution: notice.sourceInstitution || 'MIT World Peace University',
+      extracted_confidence: notice.extractedConfidence || 0,
+    }),
+  }),
+
+  toggleDeadlineStatus: async (id) => apiFetch(`/deadlines/${id}/toggle-status/`, { method: 'PATCH' }),
+  toggleDeadlineReminder: async (id) => apiFetch(`/deadlines/${id}/toggle-reminder/`, { method: 'POST', body: '{}' }),
+  deleteDeadline: async (id) => apiFetch(`/deadlines/${id}/`, { method: 'DELETE' }),
 
   // Direct Google Calendar 1-Click Link Generator
   getGoogleCalendarUrl: (notice) => {
@@ -153,28 +169,22 @@ export const noticeService = {
   askNoticeQuestion: async (notice, question) => {
     // 1. Attempt Backend Server LLM
     try {
-      const res = await fetch(`${API_BASE_URL}/notices/ask-question/`, {
+      const data = await apiFetch('/notices/ask-question/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           notice_id: notice.id,
           notice_text: notice.rawText || notice.actionRequired,
           question: question
         })
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.answer) return data.answer;
-      }
-    } catch (e) {
+      if (data.answer) return data.answer;
+    } catch {
       // Fallback to client-side heuristic engine
     }
 
     // 2. Intelligent Contextual NLP Answer Engine
     const qLower = question.toLowerCase();
     const raw = (notice.rawText || "").toLowerCase();
-    const action = (notice.actionRequired || "").toLowerCase();
-    const elig = (notice.eligibility || "").toLowerCase();
 
     if (qLower.includes("eligible") || qLower.includes("eligibility") || qLower.includes("apply to me") || qLower.includes("who can")) {
       if (notice.eligibility) {

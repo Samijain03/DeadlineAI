@@ -6,7 +6,10 @@ import {
 import { DEMO_PRESET_NOTICES } from '../services/mockData';
 
 export default function UploadStudio({ categoryList, onAddNotice, onNavigateDashboard, onNotify }) {
-  const [ocrStep, setOcrStep] = useState(0); // 0: Idle, 1: OCR Extraction, 2: LLM Entity Parsing, 3: Human Verification
+  const [ocrStep, setOcrStep] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('step') ? parseInt(params.get('step')) : 0;
+  }); // 0: Idle, 1: OCR Extraction, 2: LLM Entity Parsing, 3: Human Verification
   const [selectedPreset, setSelectedPreset] = useState(DEMO_PRESET_NOTICES[0].presetKey);
   const [activeFile, setActiveFile] = useState({
     name: DEMO_PRESET_NOTICES[0].fileName,

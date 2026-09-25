@@ -1,10 +1,14 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import App from './App.jsx'
+import LegacyApp from './App.jsx'
+import RedesignApp from './redesign/App.jsx'
+import { AuthProvider } from './auth/AuthProvider.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <AuthProvider>
+      {new URLSearchParams(window.location.search).get('legacy') === '1' ? <LegacyApp /> : <RedesignApp />}
+    </AuthProvider>
   </StrictMode>,
 )

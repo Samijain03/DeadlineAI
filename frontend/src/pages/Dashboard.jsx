@@ -25,7 +25,10 @@ export default function Dashboard({
   searchQuery,
   setSearchQuery
 }) {
-  const [viewMode, setViewMode] = useState('stream'); // 'stream', 'kanban', 'calendar', 'table'
+  const [viewMode, setViewMode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('view') || 'stream';
+  }); // 'stream', 'kanban', 'calendar', 'table'
   const [selectedCat, setSelectedCat] = useState("All");
   const [selectedPriority, setSelectedPriority] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All"); // "All", "Upcoming", "Completed", "Missed"

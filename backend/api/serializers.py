@@ -48,6 +48,7 @@ class ReminderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reminder
         fields = ['id', 'deadline', 'user', 'title', 'channel', 'trigger_date', 'due_date', 'priority', 'status', 'offset', 'created_at']
+        read_only_fields = ['user', 'created_at']
 
 
 class DeadlineSerializer(serializers.ModelSerializer):
@@ -62,6 +63,7 @@ class DeadlineSerializer(serializers.ModelSerializer):
             'source_institution', 'extracted_confidence', 'created_at', 'updated_at',
             'reminders'
         ]
+        read_only_fields = ['user', 'created_at', 'updated_at', 'reminders']
 
 
 class NoticeSerializer(serializers.ModelSerializer):
@@ -76,6 +78,7 @@ class NoticeSerializer(serializers.ModelSerializer):
             'source_institution', 'notes', 'uploaded_at', 'verified_by_user',
             'ocr_data', 'ai_extraction', 'deadlines'
         ]
+        read_only_fields = ['user', 'uploaded_at', 'ocr_data', 'ai_extraction', 'deadlines']
 
 
 class AuditLogSerializer(serializers.ModelSerializer):

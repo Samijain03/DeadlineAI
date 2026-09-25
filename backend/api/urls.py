@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AuthViewSet, CategoryViewSet, NoticeViewSet,
     DeadlineViewSet, ReminderViewSet, AuditLogViewSet,
-    conflict_radar_view, analytics_summary_view
+    conflict_radar_view, analytics_summary_view, health_view
 )
 
 router = DefaultRouter()
@@ -15,6 +15,7 @@ router.register(r'reminders', ReminderViewSet, basename='reminders')
 router.register(r'audit-logs', AuditLogViewSet, basename='audit-logs')
 
 urlpatterns = [
+    path('health/', health_view, name='health'),
     path('', include(router.urls)),
     path('conflicts/', conflict_radar_view, name='conflict-radar'),
     path('analytics/summary/', analytics_summary_view, name='analytics-summary'),

@@ -1,9 +1,7 @@
 from rest_framework import viewsets, status, generics
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth.models import User
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from django.db.models import Count, Q
 
 from .models import UserProfile, Category, Notice, OCRText, AIExtraction, Deadline, Reminder, AuditLog
@@ -14,65 +12,39 @@ from .serializers import (
 )
 from .services.ocr_service import process_document_ocr
 from .services.ai_service import analyze_notice_text
+from .permissions import IsAdminOrReadOnly
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def health_view(request):
+    return Response({'status': 'ok'})
 
 
 class AuthViewSet(viewsets.ViewSet):
-    permission_classes = [AllowAny]
-
-    @action(detail=False, methods=['post'], url_path='register')
-    def register(self, request):
-        email = request.data.get('email')
-        password = request.data.get('password', '123456')
-        name = request.data.get('name', 'Student User')
-        student_prn = request.data.get('student_prn', '')
-        department = request.data.get('department', 'School of Computer Science & Applications')
-
-        if not email:
-            return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        username = email.split('@')[0]
-        if User.objects.filter(username=username).exists():
-            user = User.objects.get(username=username)
-        else:
-            user = User.objects.create_user(username=username, email=email, password=password, first_name=name)
-            UserProfile.objects.create(user=user, student_prn=student_prn, department=department)
-
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            "message": "User authenticated",
-            "token": str(refresh.access_token),
-            "refresh": str(refresh),
-            "user": UserSerializer(user).data
-        }, status=status.HTTP_201_CREATED)
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'], url_path='me')
     def current_user(self, request):
-        if request.user.is_authenticated:
-            return Response(UserSerializer(request.user).data)
-        # Return default guest profile for smooth dev testing
-        return Response({
-            "id": 1,
-            "username": "samay_jain",
-            "email": "samay.jain@mitwpu.edu.in",
-            "first_name": "Samay Jain",
-            "profile": {
-                "student_prn": "1272251075",
-                "department": "School of Computer Science & Applications",
-                "role": "student"
-            }
-        })
+        return Response(UserSerializer(request.user).data)
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdminOrReadOnly]
 
 
 class NoticeViewSet(viewsets.ModelViewSet):
     queryset = Notice.objects.all()
     serializer_class = NoticeSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Notice.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
     @action(detail=False, methods=['post'], url_path='parse-document')
     def parse_document(self, request):
@@ -145,10 +117,13 @@ class NoticeViewSet(viewsets.ModelViewSet):
 class DeadlineViewSet(viewsets.ModelViewSet):
     queryset = Deadline.objects.all()
     serializer_class = DeadlineSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
     def get_queryset(self):
-        qs = Deadline.objects.all()
+        qs = Deadline.objects.filter(user=self.request.user)
         category = self.request.query_params.get('category')
         priority = self.request.query_params.get('priority')
         status_param = self.request.query_params.get('status')
@@ -189,6 +164,7 @@ class DeadlineViewSet(viewsets.ModelViewSet):
             offset = request.data.get('offset', '2 days before')
             Reminder.objects.create(
                 deadline=deadline,
+                user=request.user,
                 title=deadline.title,
                 channel=channel,
                 trigger_date=f"{deadline.due_date} • 09:00 AM",
@@ -205,17 +181,23 @@ class DeadlineViewSet(viewsets.ModelViewSet):
 class ReminderViewSet(viewsets.ModelViewSet):
     queryset = Reminder.objects.all()
     serializer_class = ReminderSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Reminder.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def conflict_radar_view(request):
     """
     Smart Deadline Conflict Detection Engine endpoint.
     Finds dates with multiple high/medium deadlines and generates workload stress insights.
     """
-    active_deadlines = Deadline.objects.exclude(status='Completed')
+    active_deadlines = Deadline.objects.filter(user=request.user).exclude(status='Completed')
     
     # Group by due_date
     date_map = {}
@@ -243,18 +225,19 @@ def conflict_radar_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def analytics_summary_view(request):
     """
     Analytics KPI summary endpoint.
     """
-    total = Deadline.objects.count()
-    completed = Deadline.objects.filter(status='Completed').count()
-    upcoming = Deadline.objects.filter(status='Upcoming').count()
-    high_priority = Deadline.objects.filter(priority='High', status='Upcoming').count()
-    reminders_count = Reminder.objects.filter(status='Active').count()
+    deadlines = Deadline.objects.filter(user=request.user)
+    total = deadlines.count()
+    completed = deadlines.filter(status='Completed').count()
+    upcoming = deadlines.filter(status='Upcoming').count()
+    high_priority = deadlines.filter(priority='High', status='Upcoming').count()
+    reminders_count = Reminder.objects.filter(user=request.user, status='Active').count()
 
-    categories = Deadline.objects.values('category').annotate(count=Count('id'))
+    categories = deadlines.values('category').annotate(count=Count('id'))
     cat_breakdown = {c['category']: c['count'] for c in categories}
 
     completion_rate = round((completed / total) * 100) if total > 0 else 0
@@ -275,4 +258,4 @@ def analytics_summary_view(request):
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = AuditLog.objects.all()
     serializer_class = AuditLogSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdminUser]
