@@ -2,9 +2,26 @@ import os
 import re
 import json
 import logging
+from datetime import date
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_extraction(data):
+    """Keep AI output safe for HTML controls and Django serializer fields."""
+    normalized = dict(data or {})
+    raw_date = str(normalized.get("due_date") or "").strip()
+    try:
+        date.fromisoformat(raw_date)
+    except (TypeError, ValueError):
+        raw_date = ""
+    normalized["due_date"] = raw_date
+
+    raw_time = str(normalized.get("due_time") or "").strip()
+    time_match = re.fullmatch(r"([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d(?:\.\d{1,3})?)?", raw_time)
+    normalized["due_time"] = f"{time_match.group(1)}:{time_match.group(2)}" if time_match else ""
+    return normalized
 
 def extract_with_gemini(raw_text, gemini_api_key):
     """
@@ -48,7 +65,7 @@ OUTPUT ONLY VALID JSON:
             resp_text = resp_text[:-3]
 
         parsed = json.loads(resp_text.strip())
-        return parsed
+        return normalize_extraction(parsed)
     except Exception as e:
         logger.warning(f"Gemini API execution error: {e}. Falling back to NLP Rule-Based Engine.")
         return None
@@ -137,7 +154,7 @@ def extract_with_heuristic_nlp(raw_text):
             eligibility = line.replace("ELIGIBILITY:", "").replace("Eligibility Criteria:", "").strip()
             break
 
-    return {
+    return normalize_extraction({
         "title": title[:200],
         "category": category,
         "action_required": action_required,
@@ -146,7 +163,7 @@ def extract_with_heuristic_nlp(raw_text):
         "priority": priority,
         "eligibility": eligibility,
         "confidence": 96.5
-    }
+    })
 
 
 def analyze_notice_text(raw_text):

@@ -8,6 +8,7 @@ from rest_framework import status
 from .models import Category, Deadline, Reminder, UserProfile
 from django.contrib.auth.models import User
 from .authentication import SupabaseAuthentication
+from .services.ai_service import normalize_extraction
 
 class DeadlineAPITestCase(TestCase):
     def setUp(self):
@@ -124,3 +125,17 @@ class SupabaseAuthenticationTestCase(TestCase):
         self.assertEqual(seeded_user.username, 'supabase-user-id')
         self.assertFalse(seeded_user.is_staff)
         self.assertFalse(User.objects.filter(pk=orphan_user.pk).exists())
+
+
+class AIExtractionNormalizationTestCase(TestCase):
+    def test_na_date_and_time_are_cleared_for_human_review(self):
+        result = normalize_extraction({'due_date': 'N/A', 'due_time': 'N/A'})
+
+        self.assertEqual(result['due_date'], '')
+        self.assertEqual(result['due_time'], '')
+
+    def test_valid_date_and_time_are_preserved(self):
+        result = normalize_extraction({'due_date': '2026-09-30', 'due_time': '17:30:00'})
+
+        self.assertEqual(result['due_date'], '2026-09-30')
+        self.assertEqual(result['due_time'], '17:30')

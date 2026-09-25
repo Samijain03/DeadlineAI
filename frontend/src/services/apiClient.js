@@ -17,7 +17,10 @@ export async function apiFetch(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
   const payload = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) {
-    const detail = payload?.detail || payload?.error || 'The server could not complete this request.';
+    const fieldError = payload && typeof payload === 'object'
+      ? Object.entries(payload).map(([field, messages]) => `${field.replaceAll('_', ' ')}: ${Array.isArray(messages) ? messages.join(' ') : messages}`).join(' ')
+      : '';
+    const detail = payload?.detail || payload?.error || fieldError || 'The server could not complete this request.';
     throw new Error(detail);
   }
   return payload;
