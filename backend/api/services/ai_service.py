@@ -29,7 +29,15 @@ def extract_with_gemini(raw_text, gemini_api_key):
     """
     try:
         from google import genai
-        client = genai.Client(api_key=gemini_api_key)
+        from google.genai import types
+
+        # Keep this request below the web worker timeout. If Gemini is slow or
+        # unavailable, the caller immediately falls back to the local parser.
+        timeout_ms = getattr(settings, 'GEMINI_TIMEOUT_MS', 8_000)
+        client = genai.Client(
+            api_key=gemini_api_key,
+            http_options=types.HttpOptions(timeout=timeout_ms),
+        )
 
         prompt = f"""
 You are the AI Action Extraction Engine for DeadlineAI (Academic Notice & Deadline Management System).
@@ -46,7 +54,7 @@ RULES:
 8. "confidence": Extraction confidence percentage between 80.0 and 99.9.
 
 NOTICE TEXT:
-{raw_text}
+{raw_text[:20_000]}
 
 OUTPUT ONLY VALID JSON:
 """

@@ -150,3 +150,4 @@ SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
 
 # Google Gemini API Configuration
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+GEMINI_TIMEOUT_MS = int(os.environ.get('GEMINI_TIMEOUT_MS', '8000'))

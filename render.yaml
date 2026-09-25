@@ -16,6 +16,8 @@ services:
         generateValue: true
       - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_TIMEOUT_MS
+        value: "8000"
       - key: DATABASE_URL
         sync: false
       - key: SUPABASE_URL
@@ -23,19 +25,19 @@ services:
       - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
       - key: CORS_ALLOWED_ORIGINS
-        value: https://deadlineai.onrender.com
+        value: https://deadlineai-frontend.onrender.com
       - key: CSRF_TRUSTED_ORIGINS
-        value: https://deadlineai.onrender.com
+        value: https://deadlineai-frontend.onrender.com
 
   - type: web
-    name: deadlineai
+    name: deadlineai-frontend
     runtime: static
     rootDir: frontend
     buildCommand: "npm ci && npm run build"
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://deadlineai-backend.onrender.com/api
+        value: https://deadlineai-backend-ktuw.onrender.com/api
       - key: VITE_SUPABASE_URL
         sync: false
       - key: VITE_SUPABASE_PUBLISHABLE_KEY

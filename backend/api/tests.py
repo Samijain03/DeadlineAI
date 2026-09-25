@@ -8,7 +8,7 @@ from rest_framework import status
 from .models import Category, Deadline, Reminder, UserProfile
 from django.contrib.auth.models import User
 from .authentication import SupabaseAuthentication
-from .services.ai_service import normalize_extraction
+from .services.ai_service import extract_with_gemini, normalize_extraction
 
 class DeadlineAPITestCase(TestCase):
     def setUp(self):
@@ -139,3 +139,22 @@ class AIExtractionNormalizationTestCase(TestCase):
 
         self.assertEqual(result['due_date'], '2026-09-30')
         self.assertEqual(result['due_time'], '17:30')
+
+    @patch('google.genai.Client')
+    def test_gemini_request_has_a_bounded_timeout(self, mocked_client):
+        mocked_client.return_value.models.generate_content.return_value.text = '''{
+            "title": "Exam notice",
+            "category": "Examination",
+            "action_required": "Submit the exam form",
+            "due_date": "2026-09-30",
+            "due_time": "17:00",
+            "priority": "High",
+            "eligibility": "All students",
+            "confidence": 95
+        }'''
+
+        result = extract_with_gemini('Exam registration notice', 'test-key')
+
+        self.assertEqual(result['due_date'], '2026-09-30')
+        http_options = mocked_client.call_args.kwargs['http_options']
+        self.assertEqual(http_options.timeout, 8000)
