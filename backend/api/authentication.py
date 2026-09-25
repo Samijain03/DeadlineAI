@@ -4,6 +4,8 @@ import requests
 from django.contrib.auth.models import User
 from rest_framework import authentication, exceptions
 
+from .models import UserProfile
+
 
 class SupabaseAuthentication(authentication.BaseAuthentication):
     """Validate Supabase access tokens and map their users into Django ownership rows."""
@@ -46,11 +48,25 @@ class SupabaseAuthentication(authentication.BaseAuthentication):
         metadata = payload.get("user_metadata") or {}
         app_metadata = payload.get("app_metadata") or {}
         name = metadata.get("full_name") or metadata.get("name") or email.split("@")[0]
-        role = app_metadata.get("role") or metadata.get("role") or "student"
-        user, _ = User.objects.get_or_create(
-            username=supabase_id,
-            defaults={"email": email, "first_name": name[:150]},
-        )
+        student_prn = metadata.get("student_prn") or None
+        role = app_metadata.get("role") or "student"
+
+        user = User.objects.filter(username=supabase_id).first()
+        prn_owner = User.objects.filter(profile__student_prn=student_prn).first() if student_prn else None
+        if user is not None and not hasattr(user, "profile") and prn_owner and prn_owner.pk != user.pk:
+            # A previous failed first login can leave an orphan identity row behind.
+            user.delete()
+            user = prn_owner
+        if user is None and prn_owner:
+            user = prn_owner
+        if user is None and email:
+            user = User.objects.filter(email__iexact=email).first()
+        if user is None:
+            user = User.objects.create(username=supabase_id, email=email, first_name=name[:150])
+        elif user.username != supabase_id:
+            # Adopt seeded/local student data into the verified Supabase identity.
+            user.username = supabase_id
+
         changed = False
         if user.email != email:
             user.email = email
@@ -62,16 +78,14 @@ class SupabaseAuthentication(authentication.BaseAuthentication):
         if user.is_staff != should_be_staff:
             user.is_staff = should_be_staff
             changed = True
-        if changed:
-            user.save(update_fields=["email", "first_name", "is_staff"])
+        if changed or user.username == supabase_id:
+            user.save(update_fields=["username", "email", "first_name", "is_staff"])
 
         profile = user.profile if hasattr(user, "profile") else None
         if profile is None:
-            from .models import UserProfile
-
             profile = UserProfile.objects.create(
                 user=user,
-                student_prn=metadata.get("student_prn") or None,
+                student_prn=student_prn,
                 department=metadata.get("department") or "School of Computer Science & Applications",
                 phone=metadata.get("phone") or None,
                 role=role,
@@ -79,7 +93,7 @@ class SupabaseAuthentication(authentication.BaseAuthentication):
         else:
             updates = []
             for field, value in {
-                "student_prn": metadata.get("student_prn") or profile.student_prn,
+                "student_prn": student_prn or profile.student_prn,
                 "department": metadata.get("department") or profile.department,
                 "phone": metadata.get("phone") or profile.phone,
                 "role": role,

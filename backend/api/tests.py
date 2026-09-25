@@ -1,9 +1,13 @@
+import os
+from unittest.mock import Mock, patch
+
 from django.test import TestCase
 from django.urls import reverse
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory
 from rest_framework import status
 from .models import Category, Deadline, Reminder, UserProfile
 from django.contrib.auth.models import User
+from .authentication import SupabaseAuthentication
 
 class DeadlineAPITestCase(TestCase):
     def setUp(self):
@@ -86,3 +90,37 @@ class DeadlineAPITestCase(TestCase):
         self.client.force_authenticate(user=None)
         response = self.client.get('/api/deadlines/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class SupabaseAuthenticationTestCase(TestCase):
+    @patch.dict(os.environ, {
+        'SUPABASE_URL': 'https://project.supabase.co',
+        'SUPABASE_PUBLISHABLE_KEY': 'publishable-key',
+    })
+    @patch('api.authentication.requests.get')
+    def test_existing_prn_profile_is_adopted_by_supabase_identity(self, mocked_get):
+        seeded_user = User.objects.create_user(username='seeded-student', email='seeded@example.com')
+        UserProfile.objects.create(user=seeded_user, student_prn='PRN-100')
+        orphan_user = User.objects.create_user(username='supabase-user-id')
+        mocked_get.return_value = Mock(
+            status_code=200,
+            json=lambda: {
+                'id': 'supabase-user-id',
+                'email': 'student@example.com',
+                'user_metadata': {
+                    'full_name': 'Student Name',
+                    'student_prn': 'PRN-100',
+                    'role': 'admin',
+                },
+                'app_metadata': {},
+            },
+        )
+        request = APIRequestFactory().get('/', HTTP_AUTHORIZATION='Bearer valid-token')
+
+        authenticated_user, _ = SupabaseAuthentication().authenticate(request)
+
+        seeded_user.refresh_from_db()
+        self.assertEqual(authenticated_user.pk, seeded_user.pk)
+        self.assertEqual(seeded_user.username, 'supabase-user-id')
+        self.assertFalse(seeded_user.is_staff)
+        self.assertFalse(User.objects.filter(pk=orphan_user.pk).exists())
