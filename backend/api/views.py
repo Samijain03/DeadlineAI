@@ -3,6 +3,10 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from django.db.models import Count, Q
+from django.db import transaction
+from django.http import HttpResponse
+from django.utils import timezone
+from .services.reminders import sync_reminder, due_reminders
 
 from .models import UserProfile, Category, Notice, OCRText, AIExtraction, Deadline, Reminder, AuditLog
 from .serializers import (
@@ -58,13 +62,32 @@ class NoticeViewSet(viewsets.ModelViewSet):
         # 1. OCR Extraction Step
         ocr_result = {"text": "", "method": "Direct Input"}
         if uploaded_file:
-            ocr_result = process_document_ocr(uploaded_file, filename)
+            try:
+                ocr_result = process_document_ocr(uploaded_file, filename)
+            except ValueError as exc:
+                return Response({'error': str(exc)}, status=422)
+            except ImportError:
+                return Response({'error': 'Image reading is temporarily unavailable. Try a text PDF or enter details manually.'}, status=503)
             extracted_text = ocr_result.get("text", "")
         else:
-            extracted_text = raw_text_input or "MIT World Peace University Notice Document."
+            extracted_text = str(raw_text_input).strip()
+            if not extracted_text or len(extracted_text) > 50000:
+                return Response({'error': 'Provide a document or between 1 and 50,000 characters of notice text.'}, status=400)
 
         # 2. AI Entity & Action Extraction Step
         ai_extracted = analyze_notice_text(extracted_text)
+
+        notice = None
+        if uploaded_file:
+            uploaded_file.seek(0)
+            notice = Notice.objects.create(
+                user=request.user, title=str(ai_extracted.get('title') or filename)[:255],
+                file_name=filename[:255], document_bytes=uploaded_file.read(),
+                content_type='application/pdf' if filename.lower().endswith('.pdf') else 'application/octet-stream',
+                verified_by_user=False,
+            )
+            OCRText.objects.create(notice=notice, extracted_text=extracted_text,
+                                   extraction_method=ocr_result['method'][:50])
 
         # 3. Log event
         AuditLog.objects.create(
@@ -76,6 +99,7 @@ class NoticeViewSet(viewsets.ModelViewSet):
 
         return Response({
             "success": True,
+            "notice_id": notice.pk if notice else None,
             "filename": filename,
             "file_type": "PDF Document" if filename.lower().endswith('.pdf') else "Image Notice",
             "ocr_text": extracted_text,
@@ -83,35 +107,31 @@ class NoticeViewSet(viewsets.ModelViewSet):
             "extracted_data": ai_extracted
         })
 
+    @action(detail=True, methods=['get'])
+    def document(self, request, pk=None):
+        notice = self.get_object()
+        if not notice.document_bytes:
+            return Response({'error': 'Original document is not available for this notice.'}, status=404)
+        response = HttpResponse(bytes(notice.document_bytes), content_type=notice.content_type)
+        from django.utils.http import content_disposition_header
+        response['Content-Disposition'] = content_disposition_header(True, notice.file_name or 'notice')
+        response['X-Content-Type-Options'] = 'nosniff'
+        response['Cache-Control'] = 'private, no-store'
+        return response
+
     @action(detail=False, methods=['post'], url_path='ask-question')
     def ask_question(self, request):
-        """
-        AI Notice Question Answering Assistant (from PDF Page 12).
-        """
-        notice_text = request.data.get('notice_text', '')
-        question = request.data.get('question', '')
-
-        if not question:
-            return Response({"error": "Question is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Contextual response logic
-        q_low = question.lower()
-        text_low = notice_text.lower()
-
-        if any(w in q_low for w in ['eligible', 'eligibility', 'apply to me', 'criteria']):
-            answer = "Based on this notice, please verify the academic attendance criteria (minimum 75%) and previous semester backlog requirements specified in the circular."
-        elif any(w in q_low for w in ['document', 'submit', 'papers', 'bring']):
-            answer = "Required documents: Official ERP form printout, fee transaction receipt, and signed copy from your department mentor."
-        elif any(w in q_low for w in ['deadline', 'due', 'date', 'last date', 'when']):
-            answer = "Submission cutoff: Please refer to the designated deadline on your dashboard and ensure submission prior to portal lockout."
-        else:
-            answer = f"According to the official circular details: '{notice_text[:180]}...'. Please ensure all submissions are completed before the cutoff."
-
-        return Response({
-            "success": True,
-            "question": question,
-            "answer": answer
-        })
+        question = str(request.data.get('question', '')).strip()
+        text = str(request.data.get('notice_text', '')).strip()
+        if not question or not text:
+            return Response({'error': 'Provide a question and source notice text.'}, status=400)
+        import re
+        words = set(re.findall(r'[a-z]{4,}', question.lower())) - {'what', 'when', 'this', 'that', 'does', 'have', 'need'}
+        lines = re.split(r'(?<=[.!?])\s+|\n', text)
+        matches = sorted(lines, key=lambda line: len(words & set(re.findall(r'[a-z]{4,}', line.lower()))), reverse=True)
+        matches = [line for line in matches if words & set(re.findall(r'[a-z]{4,}', line.lower()))]
+        answer = 'Relevant source text: ' + ' '.join(matches[:3]) if matches else 'I could not find an answer in this notice. Check the original document or contact its issuer.'
+        return Response({'answer': answer, 'method': 'Source text lookup'})
 
 
 class DeadlineViewSet(viewsets.ModelViewSet):
@@ -119,11 +139,37 @@ class DeadlineViewSet(viewsets.ModelViewSet):
     serializer_class = DeadlineSerializer
     permission_classes = [IsAuthenticated]
 
+    @transaction.atomic
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        deadline = serializer.save(user=self.request.user)
+        self.save_notice_details(deadline)
+        sync_reminder(deadline)
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        deadline = serializer.save()
+        self.save_notice_details(deadline)
+        sync_reminder(deadline)
+
+    def save_notice_details(self, deadline):
+        if deadline.notice_id is None:
+            deadline.notice = Notice.objects.create(user=deadline.user, title=deadline.title, file_name=deadline.file_name)
+            deadline.save(update_fields=['notice'])
+        notice = deadline.notice
+        notice.title = deadline.title
+        notice.category = deadline.category
+        notice.verified_by_user = True
+        notice.save(update_fields=['title', 'category', 'verified_by_user'])
+        OCRText.objects.update_or_create(notice=notice, defaults={'extracted_text': deadline.raw_text or '', 'extraction_method': 'Reviewed source'})
+        AIExtraction.objects.update_or_create(notice=notice, defaults={
+            'extracted_action': deadline.action_required, 'extracted_deadline': deadline.due_date,
+            'extracted_due_time': deadline.due_time, 'extracted_priority': deadline.priority,
+            'extracted_eligibility': deadline.eligibility or '', 'confidence_score': deadline.extracted_confidence,
+        })
 
     def get_queryset(self):
         qs = Deadline.objects.filter(user=self.request.user)
+        qs.filter(status='Upcoming', due_date__lt=timezone.localdate()).update(status='Missed')
         category = self.request.query_params.get('category')
         priority = self.request.query_params.get('priority')
         status_param = self.request.query_params.get('status')
@@ -135,6 +181,16 @@ class DeadlineViewSet(viewsets.ModelViewSet):
             qs = qs.filter(priority=priority)
         if status_param and status_param != 'All':
             qs = qs.filter(status=status_param)
+        for parameter, lookup in [('date_from', 'due_date__gte'), ('date_to', 'due_date__lte')]:
+            value = self.request.query_params.get(parameter)
+            if value:
+                from datetime import date
+                from rest_framework.exceptions import ValidationError
+                try:
+                    date.fromisoformat(value)
+                except ValueError:
+                    raise ValidationError({parameter: 'Use YYYY-MM-DD.'})
+                qs = qs.filter(**{lookup: value})
         if search:
             qs = qs.filter(
                 Q(title__icontains=search) |
@@ -143,42 +199,31 @@ class DeadlineViewSet(viewsets.ModelViewSet):
             )
         return qs
 
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        notice = instance.notice
+        instance.delete()
+        if notice and not notice.deadlines.exists():
+            notice.delete()
+
     @action(detail=True, methods=['patch'], url_path='toggle-status')
     def toggle_status(self, request, pk=None):
         deadline = self.get_object()
         deadline.status = 'Upcoming' if deadline.status == 'Completed' else 'Completed'
         deadline.save()
+        sync_reminder(deadline)
         return Response(DeadlineSerializer(deadline).data)
 
     @action(detail=True, methods=['post'], url_path='toggle-reminder')
     def toggle_reminder(self, request, pk=None):
         deadline = self.get_object()
-        existing = Reminder.objects.filter(deadline=deadline)
-        if existing.exists():
-            existing.delete()
-            deadline.reminder_set = False
-            deadline.save()
-            return Response({"reminder_set": False, "message": "Reminder removed"})
-        else:
-            channel = request.data.get('channel', 'Email & WhatsApp')
-            offset = request.data.get('offset', '2 days before')
-            Reminder.objects.create(
-                deadline=deadline,
-                user=request.user,
-                title=deadline.title,
-                channel=channel,
-                trigger_date=f"{deadline.due_date} • 09:00 AM",
-                due_date=deadline.due_date,
-                priority=deadline.priority,
-                offset=offset,
-                status='Active'
-            )
-            deadline.reminder_set = True
-            deadline.save()
-            return Response({"reminder_set": True, "message": "Reminder scheduled"})
+        deadline.reminder_set = not deadline.reminder_set
+        deadline.save(update_fields=['reminder_set'])
+        sync_reminder(deadline)
+        return Response({'reminder_set': deadline.reminder_set})
 
 
-class ReminderViewSet(viewsets.ModelViewSet):
+class ReminderViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Reminder.objects.all()
     serializer_class = ReminderSerializer
     permission_classes = [IsAuthenticated]
@@ -186,8 +231,16 @@ class ReminderViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Reminder.objects.filter(user=self.request.user)
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+    @action(detail=False, methods=['get'])
+    def due(self, request):
+        return Response(ReminderSerializer(due_reminders(request.user), many=True).data)
+
+    @action(detail=True, methods=['post'])
+    def acknowledge(self, request, pk=None):
+        reminder = self.get_object()
+        reminder.status = 'Dispatched'
+        reminder.save(update_fields=['status'])
+        return Response({'status': 'Dispatched'})
 
 
 @api_view(['GET'])
@@ -259,3 +312,31 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = AuditLog.objects.all()
     serializer_class = AuditLogSerializer
     permission_classes = [IsAdminUser]
+
+
+class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
+    from django.contrib.auth.models import User
+    queryset = User.objects.all().order_by('id')
+    serializer_class = UserSerializer
+    permission_classes = [IsAdminUser]
+
+    @action(detail=True, methods=['post'], url_path='set-active')
+    def set_active(self, request, pk=None):
+        user = self.get_object()
+        if user.pk == request.user.pk or user.is_superuser or user.is_staff:
+            return Response({'error': 'Administrator accounts cannot be disabled here.'}, status=400)
+        active = request.data.get('is_active')
+        if not isinstance(active, bool):
+            return Response({'error': 'is_active must be true or false.'}, status=400)
+        user.is_active = active
+        user.save(update_fields=['is_active'])
+        return Response(UserSerializer(user).data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_summary(request):
+    from django.contrib.auth.models import User
+    return Response({'users': User.objects.count(), 'notices': Notice.objects.count(),
+                     'deadlines': Deadline.objects.count(), 'completed': Deadline.objects.filter(status='Completed').count(),
+                     'reminders': Reminder.objects.filter(status='Active').count()})

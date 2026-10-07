@@ -1,10 +1,10 @@
 services:
   - type: web
     name: deadlineai-backend
-    runtime: python
+    runtime: docker
     rootDir: backend
-    buildCommand: "./build.sh"
-    startCommand: "gunicorn deadline_ai.wsgi:application"
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /api/health/
     plan: free
     envVars:

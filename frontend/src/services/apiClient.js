@@ -14,7 +14,9 @@ export async function apiFetch(path, options = {}) {
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const { rawResponse, ...fetchOptions } = options;
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...fetchOptions, headers });
+  if (rawResponse && response.ok) return response;
   const payload = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) {
     const fieldError = payload && typeof payload === 'object'

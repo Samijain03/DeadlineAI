@@ -27,6 +27,8 @@ class Category(models.Model):
 
 
 class Notice(models.Model):
+    document_bytes = models.BinaryField(null=True, blank=True, editable=False)
+    content_type = models.CharField(max_length=100, blank=True)
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='notices')
     title = models.CharField(max_length=255)
     category = models.CharField(max_length=100, default='General')
@@ -87,7 +89,7 @@ class Deadline(models.Model):
     category = models.CharField(max_length=100, default='General')
     action_required = models.TextField()
     due_date = models.DateField()
-    due_time = models.CharField(max_length=20, default='17:00')
+    due_time = models.CharField(max_length=20, default='', blank=True)
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='Medium')
     eligibility = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Upcoming')

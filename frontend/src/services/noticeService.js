@@ -66,16 +66,16 @@ export const noticeService = {
 
   // Backend Django API Connector Methods (with auto-fallback)
   fetchBackendDeadlines: async () => {
-    try {
       const data = await apiFetch('/deadlines/');
         if (Array.isArray(data) && data.length > 0) {
           return data.map(d => ({
             id: d.id,
+            noticeId: d.notice,
             title: d.title,
             category: d.category,
             actionRequired: d.action_required,
             dueDate: d.due_date,
-            dueTime: d.due_time || '17:00',
+            dueTime: d.due_time || '',
             priority: d.priority,
             eligibility: d.eligibility,
             status: d.status,
@@ -89,15 +89,11 @@ export const noticeService = {
           }));
         }
         return [];
-    } catch (err) {
-      console.info("Backend API not reachable:", err.message);
-    }
-    return [];
+
   },
 
   parseDocumentOnBackend: async (fileOrTextPayload) => {
-    try {
-      let options = {};
+      let options;
       if (fileOrTextPayload instanceof FormData) {
         options = {
           method: 'POST',
@@ -111,20 +107,18 @@ export const noticeService = {
         };
       }
       return await apiFetch('/notices/parse-document/', options);
-    } catch (err) {
-      console.warn("Backend parse endpoint offline:", err);
-    }
-    return null;
+
   },
 
   createDeadline: async (notice) => apiFetch('/deadlines/', {
     method: 'POST',
     body: JSON.stringify({
+      notice: notice.noticeId || null,
       title: notice.title,
       category: notice.category || 'General',
       action_required: notice.actionRequired,
       due_date: notice.dueDate,
-      due_time: notice.dueTime || '17:00',
+      due_time: notice.dueTime || '',
       priority: notice.priority || 'Medium',
       eligibility: notice.eligibility || '',
       status: notice.status || 'Upcoming',
@@ -137,6 +131,9 @@ export const noticeService = {
     }),
   }),
 
+  updateDeadline: (id, fields) => apiFetch(`/deadlines/${id}/`, { method: 'PATCH', body: JSON.stringify(fields) }),
+  dueReminders: () => apiFetch('/reminders/due/'),
+  acknowledgeReminder: id => apiFetch(`/reminders/${id}/acknowledge/`, { method: 'POST' }),
   toggleDeadlineStatus: async (id) => apiFetch(`/deadlines/${id}/toggle-status/`, { method: 'PATCH' }),
   toggleDeadlineReminder: async (id) => apiFetch(`/deadlines/${id}/toggle-reminder/`, { method: 'POST', body: '{}' }),
   deleteDeadline: async (id) => apiFetch(`/deadlines/${id}/`, { method: 'DELETE' }),

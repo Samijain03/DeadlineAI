@@ -51,21 +51,17 @@ class SupabaseAuthentication(authentication.BaseAuthentication):
         student_prn = metadata.get("student_prn") or None
         role = app_metadata.get("role") or "student"
 
+        # Only the verified provider subject establishes ownership. PRNs and names
+        # are user-editable profile data, never credentials for another account.
         user = User.objects.filter(username=supabase_id).first()
-        prn_owner = User.objects.filter(profile__student_prn=student_prn).first() if student_prn else None
-        if user is not None and not hasattr(user, "profile") and prn_owner and prn_owner.pk != user.pk:
-            # A previous failed first login can leave an orphan identity row behind.
-            user.delete()
-            user = prn_owner
-        if user is None and prn_owner:
-            user = prn_owner
-        if user is None and email:
-            user = User.objects.filter(email__iexact=email).first()
         if user is None:
             user = User.objects.create(username=supabase_id, email=email, first_name=name[:150])
-        elif user.username != supabase_id:
-            # Adopt seeded/local student data into the verified Supabase identity.
-            user.username = supabase_id
+            user.set_unusable_password()
+            user.save(update_fields=['password'])
+        if not user.is_active:
+            raise exceptions.AuthenticationFailed("This account has been disabled.")
+        if student_prn and UserProfile.objects.filter(student_prn=student_prn).exclude(user=user).exists():
+            student_prn = None
 
         changed = False
         if user.email != email:

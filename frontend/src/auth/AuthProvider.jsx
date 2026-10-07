@@ -5,6 +5,7 @@ import { AuthContext } from './authContext';
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(isSupabaseConfigured);
+  const [recovering, setRecovering] = useState(new URLSearchParams(window.location.search).has('reset-password'));
 
   useEffect(() => {
     if (!supabase) return;
@@ -16,6 +17,7 @@ export function AuthProvider({ children }) {
       }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (_event === 'PASSWORD_RECOVERY') setRecovering(true);
       setSession(nextSession);
       setLoading(false);
     });
@@ -28,6 +30,15 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     configured: isSupabaseConfigured,
     loading,
+    recovering,
+    updatePassword: async password => {
+      const result = await supabase.auth.updateUser({ password });
+      if (!result.error) {
+        setRecovering(false);
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+      return result;
+    },
     session,
     user: session?.user || null,
     signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }),
@@ -53,7 +64,7 @@ export function AuthProvider({ children }) {
       email,
       options: { emailRedirectTo: window.location.origin },
     }),
-  }), [loading, session]);
+  }), [loading, session, recovering]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

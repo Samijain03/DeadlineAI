@@ -1,100 +1,68 @@
-import os
+"""Bounded text extraction; never substitute invented notice text."""
 import io
-import logging
+from PIL import Image, ImageOps
 from pypdf import PdfReader
 
-logger = logging.getLogger(__name__)
+MAX_FILE_BYTES = 10 * 1024 * 1024
+MAX_PAGES = 5
 
-def extract_text_from_pdf(file_path_or_bytes):
-    """
-    Extracts text from PDF document using PyPDF.
-    """
+
+def image_text(image):
+    import pytesseract
+    if image.width * image.height > 25_000_000:
+        raise ValueError('Use an image below 25 megapixels.')
+    image = ImageOps.exif_transpose(image).convert('RGB')
+    image.thumbnail((2200, 2200))
+    return pytesseract.image_to_string(image, timeout=2).strip()
+
+
+def process_document_ocr(file_obj, filename=''):
+    data = file_obj.read(MAX_FILE_BYTES + 1)
+    file_obj.seek(0)
+    if not data or len(data) > MAX_FILE_BYTES:
+        raise ValueError('Choose a non-empty file of up to 10 MB.')
+    extension = filename.lower().rsplit('.', 1)[-1]
+    if extension not in {'pdf', 'jpg', 'jpeg', 'png'}:
+        raise ValueError('Choose a PDF, JPG or PNG file.')
+    parts = []
+    used_ocr = False
     try:
-        if isinstance(file_path_or_bytes, (str, bytes, bytearray)):
-            if isinstance(file_path_or_bytes, str) and os.path.exists(file_path_or_bytes):
-                reader = PdfReader(file_path_or_bytes)
-            else:
-                reader = PdfReader(io.BytesIO(file_path_or_bytes))
+        if extension == 'pdf':
+            reader = PdfReader(io.BytesIO(data))
+            if reader.is_encrypted:
+                raise ValueError('Remove the PDF password before uploading.')
+            if len(reader.pages) > MAX_PAGES:
+                raise ValueError('Upload at most 5 pages at a time.')
+            scanned = None
+            try:
+                for index, page in enumerate(reader.pages):
+                    text = (page.extract_text() or '').strip()
+                    if not text:
+                        import pypdfium2
+                        if scanned is None:
+                            scanned = pypdfium2.PdfDocument(data)
+                        rendered = scanned[index]
+                        width, height = rendered.get_size()
+                        bitmap = rendered.render(scale=min(1.5, 2200 / max(width, height)))
+                        try:
+                            text = image_text(bitmap.to_pil())
+                        finally:
+                            bitmap.close()
+                            rendered.close()
+                        used_ocr = True
+                    parts.append(text)
+            finally:
+                if scanned is not None:
+                    scanned.close()
         else:
-            reader = PdfReader(file_path_or_bytes)
-
-        full_text = []
-        for page_idx, page in enumerate(reader.pages):
-            page_text = page.extract_text()
-            if page_text:
-                full_text.append(page_text.strip())
-
-        extracted = "\n\n".join(full_text)
-        if extracted.strip():
-            return {
-                "success": True,
-                "text": extracted,
-                "method": "PyPDF Native Text Extractor",
-                "page_count": len(reader.pages)
-            }
-    except Exception as e:
-        logger.warning(f"PyPDF extraction error: {e}")
-
-    return {
-        "success": False,
-        "text": "",
-        "method": "PyPDF Failed",
-        "error": "Could not parse text from PDF directly."
-    }
-
-def extract_text_from_image(file_path_or_bytes):
-    """
-    Extracts text from image notice (PNG/JPG).
-    """
-    try:
-        import pytesseract
-        from PIL import Image
-
-        if isinstance(file_path_or_bytes, str) and os.path.exists(file_path_or_bytes):
-            image = Image.open(file_path_or_bytes)
-        else:
-            image = Image.open(io.BytesIO(file_path_or_bytes))
-
-        text = pytesseract.image_to_string(image)
-        if text.strip():
-            return {
-                "success": True,
-                "text": text.strip(),
-                "method": "PyTesseract OCR Engine"
-            }
-    except Exception as e:
-        logger.info(f"PyTesseract not found or OCR error: {e}. Fallback enabled.")
-
-    return {
-        "success": False,
-        "text": "",
-        "method": "OCR Engine Fallback",
-        "error": "OCR engine required scanned document preprocessing."
-    }
-
-def process_document_ocr(file_obj, filename=""):
-    """
-    Top-level OCR dispatcher.
-    """
-    ext = os.path.splitext(filename)[1].lower() if filename else ""
-    
-    file_bytes = file_obj.read() if hasattr(file_obj, 'read') else file_obj
-    if hasattr(file_obj, 'seek'):
-        file_obj.seek(0)
-
-    if ext == '.pdf':
-        res = extract_text_from_pdf(file_bytes)
-        if res["success"]:
-            return res
-    
-    # Try image OCR
-    img_res = extract_text_from_image(file_bytes)
-    if img_res["success"]:
-        return img_res
-
-    # Clean fallback text if both empty
-    return {
-        "success": True,
-        "text": f"MIT WORLD PEACE UNIVERSITY\nNOTICE: {filename or 'Academic Document'}\nPlease refer to official ERP portal for full circular details.\nAction: Complete submission before scheduled cutoff.",
-        "method": "Heuristic Document Parser Fallback"
-    }
+            with Image.open(io.BytesIO(data)) as image:
+                parts.append(image_text(image))
+            used_ocr = True
+    except (ValueError, ImportError):
+        raise
+    except Exception as exc:
+        raise ValueError('This document could not be read. Try a clearer file or enter its details manually.') from exc
+    text = '\n\n'.join(parts).strip()
+    if not text:
+        raise ValueError('No readable text was found. Try a clearer file or enter details manually.')
+    return {'success': True, 'text': text[:50000], 'method': 'Tesseract OCR' if used_ocr else 'PDF text extraction'}

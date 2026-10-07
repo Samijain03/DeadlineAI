@@ -13,7 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'password', 'profile']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'password', 'profile', 'is_active']
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)
@@ -45,6 +45,10 @@ class AIExtractionSerializer(serializers.ModelSerializer):
 
 
 class ReminderSerializer(serializers.ModelSerializer):
+    def validate_deadline(self, value):
+        if value and value.user_id != self.context['request'].user.id:
+            raise serializers.ValidationError('Choose one of your own deadlines.')
+        return value
     class Meta:
         model = Reminder
         fields = ['id', 'deadline', 'user', 'title', 'channel', 'trigger_date', 'due_date', 'priority', 'status', 'offset', 'created_at']
@@ -53,6 +57,17 @@ class ReminderSerializer(serializers.ModelSerializer):
 
 class DeadlineSerializer(serializers.ModelSerializer):
     reminders = ReminderSerializer(many=True, read_only=True)
+
+    def validate_notice(self, value):
+        if value and value.user_id != self.context['request'].user.id:
+            raise serializers.ValidationError('Choose one of your own notices.')
+        return value
+
+    def validate_due_time(self, value):
+        import re
+        if value and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', value):
+            raise serializers.ValidationError('Use HH:mm or leave the time blank.')
+        return value
 
     class Meta:
         model = Deadline
