@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from . import native_auth
 from .views import (
     AdminUserViewSet, admin_summary, AuthViewSet, CategoryViewSet, NoticeViewSet,
     DeadlineViewSet, ReminderViewSet, AuditLogViewSet,
@@ -16,6 +17,13 @@ router.register(r'reminders', ReminderViewSet, basename='reminders')
 router.register(r'audit-logs', AuditLogViewSet, basename='audit-logs')
 
 urlpatterns = [
+    path('account/register/', native_auth.register),
+    path('account/login/', native_auth.login),
+    path('account/refresh/', native_auth.refresh),
+    path('account/logout/', native_auth.logout),
+    path('account/me/', native_auth.me),
+    path('account/forgot-password/', native_auth.forgot_password),
+    path('account/reset-password/', native_auth.reset_password),
     path('admin-summary/', admin_summary),
     path('health/', health_view, name='health'),
     path('', include(router.urls)),

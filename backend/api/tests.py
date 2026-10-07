@@ -253,3 +253,55 @@ class CompleteWorkflowTests(TestCase):
         self.assertFalse(notice.verified_by_user)
         self.assertEqual(bytes(notice.document_bytes),b'image bytes')
         self.assertEqual(Deadline.objects.count(),0)
+
+class NativeAuthenticationTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.client = APIClient()
+        self.details = {'email': 'native@example.com', 'password': 'UniqueLongPassword!42',
+                        'name': 'Test Student', 'studentPrn': 'NATIVE001', 'department': 'Computing'}
+
+    def test_registration_rotation_logout_and_disabled_account(self):
+        response = self.client.post('/api/account/register/', self.details, format='json')
+        self.assertEqual(response.status_code, 201)
+        session = response.data['session']
+        self.assertEqual(session['user']['app_metadata']['role'], 'student')
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + session['access_token'])
+        self.assertEqual(self.client.get('/api/account/me/').status_code, 200)
+        rotated = self.client.post('/api/account/refresh/', {'refresh_token': session['refresh_token']}, format='json')
+        self.assertEqual(rotated.status_code, 200)
+        self.assertEqual(self.client.post('/api/account/refresh/', {'refresh_token': session['refresh_token']}, format='json').status_code, 401)
+        new_refresh = rotated.data['refresh_token']
+        self.assertEqual(self.client.post('/api/account/logout/', {'refresh_token': new_refresh}, format='json').status_code, 204)
+        self.assertEqual(self.client.post('/api/account/refresh/', {'refresh_token': new_refresh}, format='json').status_code, 401)
+        login = self.client.post('/api/account/login/', {'email': self.details['email'], 'password': self.details['password']}, format='json')
+        self.assertEqual(login.status_code, 200)
+        User.objects.filter(email=self.details['email']).update(is_active=False)
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + login.data['session']['access_token'])
+        self.assertEqual(self.client.get('/api/account/me/').status_code, 401)
+
+    def test_validation_and_duplicate_prn_are_atomic(self):
+        weak = {**self.details, 'password': 'short'}
+        self.assertEqual(self.client.post('/api/account/register/', weak, format='json').status_code, 400)
+        self.assertEqual(User.objects.count(), 0)
+        self.client.post('/api/account/register/', self.details, format='json')
+        duplicate = {**self.details, 'email': 'other@example.com'}
+        self.assertEqual(self.client.post('/api/account/register/', duplicate, format='json').status_code, 400)
+        self.assertEqual(User.objects.count(), 1)
+
+    def test_reset_is_single_use_and_revokes_old_access(self):
+        from django.test import override_settings
+        from django.core import mail
+        from urllib.parse import urlparse, parse_qs
+        registered = self.client.post('/api/account/register/', self.details, format='json').data['session']
+        with override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'):
+            response = self.client.post('/api/account/forgot-password/', {'email': self.details['email']}, format='json')
+            self.assertEqual(response.status_code, 200)
+            link = next(line for line in mail.outbox[0].body.splitlines() if line.startswith('http'))
+            query = parse_qs(urlparse(link).query)
+            payload = {'uid': query['uid'][0], 'token': query['token'][0], 'password': 'NewUniquePassword!55'}
+            self.assertEqual(self.client.post('/api/account/reset-password/', payload, format='json').status_code, 200)
+            self.assertEqual(self.client.post('/api/account/reset-password/', payload, format='json').status_code, 400)
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + registered['access_token'])
+        self.assertEqual(self.client.get('/api/account/me/').status_code, 401)

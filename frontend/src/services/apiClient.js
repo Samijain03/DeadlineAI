@@ -1,10 +1,9 @@
-import { supabase } from '../lib/supabase';
+import { accessToken } from '../auth/session';
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
 export async function apiFetch(path, options = {}) {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  const token = await accessToken();
   if (!token) throw new Error('Your session has expired. Please sign in again.');
 
   const headers = new Headers(options.headers || {});
@@ -15,7 +14,11 @@ export async function apiFetch(path, options = {}) {
   }
 
   const { rawResponse, ...fetchOptions } = options;
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...fetchOptions, headers });
+  let response = await fetch(`${API_BASE_URL}${path}`, { ...fetchOptions, headers });
+  if (response.status === 401) {
+    headers.set('Authorization', `Bearer ${await accessToken(true)}`);
+    response = await fetch(`${API_BASE_URL}${path}`, { ...fetchOptions, headers });
+  }
   if (rawResponse && response.ok) return response;
   const payload = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) {

@@ -8,8 +8,9 @@ API: https://deadlineai-backend-ktuw.onrender.com/api
 The backend Dockerfile installs Tesseract and its English model. Render must use the
 Docker runtime, root directory `backend`, Dockerfile `./Dockerfile`, and the image's
 default start command. It applies Django migrations at startup and starts Gunicorn.
-Keep the existing DATABASE_URL, SECRET_KEY, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY,
-GEMINI_API_KEY, CORS_ALLOWED_ORIGINS and CSRF_TRUSTED_ORIGINS environment variables.
+Set DATABASE_URL to the private Neon PostgreSQL connection string with SSL required.
+Keep SECRET_KEY, GEMINI_API_KEY, CORS_ALLOWED_ORIGINS and CSRF_TRUSTED_ORIGINS.
+Set FRONTEND_URL to the deployed frontend origin. Supabase is no longer required.
 The free instance may sleep; the app reports connection errors with a retry option.
 
 Original uploads (maximum 10 MB, 5 PDF pages) are stored privately in PostgreSQL;
@@ -23,13 +24,30 @@ Email, WhatsApp, background push and ingestion integrations are not enabled.
 
 ## Administrator access
 
-An operator assigns `app_metadata.role = admin` (or coordinator) through trusted
-Supabase administration. Never use user-editable metadata to assign permissions.
+An operator grants Django `is_staff` through trusted server administration.
+Registration always creates a student; client metadata cannot grant permissions.
 The administration page manages categories, user access, activity and statistics.
 Disabling a user in Django prevents subsequent authenticated API requests, even if
-the browser still holds a Supabase session. Django's `/admin/` additionally supports
+the browser still holds an access token. Django's `/admin/` additionally supports
 full operator management; create a superuser through `manage.py createsuperuser`.
 Production builds no longer seed sample users or known passwords.
+
+## Authentication and migration
+
+Django owns registration, login, password hashing and account permissions. Access
+tokens last 15 minutes; refresh tokens rotate and are revoked on logout. Password
+changes invalidate old access tokens. Browser credentials use a new storage namespace;
+old Supabase sessions are not treated as native accounts.
+
+This is a fresh Neon database. Old Supabase users and records remain in the paused
+project and cannot be migrated until it or a backup becomes accessible. Existing
+users must register again in the new database.
+
+Password-reset tokens expire after one hour and are single-use. Configure a working
+email backend and sender before claiming reset emails are operational. The API returns
+an explicit unavailable error when no SMTP sender is configured. Render may restrict
+outbound SMTP on free services; use a production HTTP email backend or an eligible
+service plan. Never use the console email backend in production (it logs reset links).
 
 ## Local development and checks
 
