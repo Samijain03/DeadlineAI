@@ -7,13 +7,18 @@ MAX_FILE_BYTES = 10 * 1024 * 1024
 MAX_PAGES = 5
 
 
-def image_text(image):
+def image_text(image, timeout=10):
     import pytesseract
     if image.width * image.height > 25_000_000:
         raise ValueError('Use an image below 25 megapixels.')
     image = ImageOps.exif_transpose(image).convert('RGB')
     image.thumbnail((2200, 2200))
-    return pytesseract.image_to_string(image, timeout=2).strip()
+    try:
+        return pytesseract.image_to_string(image, timeout=timeout).strip()
+    except RuntimeError as exc:
+        if 'timeout' in str(exc).lower():
+            raise ValueError('Reading this image took too long. Try fewer pages or a smaller, clear image.') from exc
+        raise
 
 
 def process_document_ocr(file_obj, filename=''):
@@ -45,7 +50,7 @@ def process_document_ocr(file_obj, filename=''):
                         width, height = rendered.get_size()
                         bitmap = rendered.render(scale=min(1.5, 2200 / max(width, height)))
                         try:
-                            text = image_text(bitmap.to_pil())
+                            text = image_text(bitmap.to_pil(), timeout=5)
                         finally:
                             bitmap.close()
                             rendered.close()
