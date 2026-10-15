@@ -1,0 +1,2 @@
+.story-nav{gap:18px}.story-nav-note{margin-left:auto}.story-nav .landing-signin{white-space:nowrap}.landing-trust{max-width:760px;margin:0 auto 60px;padding:0 24px;display:flex;gap:14px;align-items:flex-start;color:#68715f}.landing-trust svg{flex-shrink:0;margin-top:4px}.landing-trust p{font-size:13px;line-height:1.8;margin:0}.auth-home{margin-top:20px}
+@media(max-width:600px){.story-nav-note{display:none}.story-nav .brand{margin-right:auto}.story-nav{gap:12px}.landing-trust{margin-bottom:36px}.landing-trust p{font-size:12px}}

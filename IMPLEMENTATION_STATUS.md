@@ -14,7 +14,8 @@ Source: DeadlineAI_Synopsis.pdf (14 pages), reviewed 7 October 2026.
 - [x] Reminder scheduling and in-app delivery.
 - [x] Administrator user/category/activity/statistics management.
 - [x] Regression tests and production frontend build.
-- [ ] Configure production password-reset email delivery (reset token workflow is tested).
+- [x] Password-reset email delivered and recovery confirmed by the owner using the Resend test sender.
+- [ ] Verify a sender domain before enabling password-reset delivery for arbitrary student addresses.
 - [x] Live registration, OCR upload, task save/reload/edit/delete, private download, logout and revoked refresh checks.
 
 ## Deployment and data
@@ -44,5 +45,4 @@ Uploads: 10 MB, five PDF pages, English OCR. Reminders arrive while the app is o
 on the next visit; external email/WhatsApp/push reminders are not enabled. Original files
 are private database bytes, so storage usage grows with uploads. Authentication tests cover
 registration validation, duplicate PRNs, token rotation, logout, disabled accounts and
-single-use password resets; production reset email still requires a configured sender.
-
+single-use password resets. Resend test delivery is configured and owner-tested; without a verified domain it is limited to the Resend account email.

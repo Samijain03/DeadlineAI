@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test:auth": "node scripts/test-auth-flow.mjs",
+    "test:auth": "node tests/navigation.test.mjs && node scripts/test-auth-flow.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

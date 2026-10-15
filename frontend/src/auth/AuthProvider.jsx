@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AuthContext } from './authContext';
 import { accessToken, accountRequest, getSession, saveSession } from './session';
+import { navigateTo } from '../lib/navigation';
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(getSession);
@@ -28,7 +29,7 @@ export function AuthProvider({ children }) {
     });
     return {
       configured: true, loading, recovering, notice, session, user: session?.user || null,
-      cancelRecovery: () => { setRecovering(false); window.history.replaceState({}, '', window.location.pathname); },
+      cancelRecovery: () => { setRecovering(false); navigateTo('/login', { replace: true }); },
       signIn: (email, password) => authenticate('login', { email, password }),
       signUp: details => authenticate('register', details),
       signOut: async () => { const current = getSession(); saveSession(null); if (current) await accountRequest('logout', { refresh_token: current.refresh_token }).catch(() => {}); },
@@ -36,7 +37,7 @@ export function AuthProvider({ children }) {
       updatePassword: password => attempt(async () => {
         const query = new URLSearchParams(window.location.search);
         const data = await accountRequest('reset-password', { uid: query.get('uid'), token: query.get('token'), password });
-        saveSession(null); setRecovering(false); window.history.replaceState({}, '', window.location.pathname);
+        saveSession(null); setRecovering(false); navigateTo('/login', { replace: true });
         setNotice('Password updated. Sign in with your new password.');
         return data;
       }),

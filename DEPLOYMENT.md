@@ -5,6 +5,12 @@
 Frontend: https://deadlineai-frontend.onrender.com
 API: https://deadlineai-backend-ktuw.onrender.com/api
 
+The public homepage is `/`. Registration is `/signup`, sign-in is `/login`, and the
+private workspace is `/app`. Signed-out workspace visits lead to sign-in; signing in
+opens the workspace. The logo and “Meet DeadlineAI” return to the public homepage.
+Password-reset links take precedence over the homepage, and the completed reset
+returns to sign-in. Render's SPA rewrite must serve index.html for these frontend routes.
+
 The backend Dockerfile installs Tesseract and its English model. Render must use the
 Docker runtime, root directory `backend`, Dockerfile `./Dockerfile`, and the image's
 default start command. It applies Django migrations at startup and starts Gunicorn.
@@ -65,6 +71,7 @@ service plan. Never use the console email backend in production (it logs reset l
 
 Without an owned domain, `onboarding@resend.dev` is limited to tests addressed to the
 Resend account owner's email. It is not a production sender for arbitrary students.
+The owner confirmed a successful reset using this test sender on 15 October 2026.
 The Render-provided onrender.com domain cannot be verified because its DNS is not yours.
 No real email is sent by the automated regression suite.
 
