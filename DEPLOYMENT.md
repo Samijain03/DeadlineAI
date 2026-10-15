@@ -9,7 +9,9 @@ The public homepage is `/`. Registration is `/signup`, sign-in is `/login`, and 
 private workspace is `/app`. Signed-out workspace visits lead to sign-in; signing in
 opens the workspace. The logo and “Meet DeadlineAI” return to the public homepage.
 Password-reset links take precedence over the homepage, and the completed reset
-returns to sign-in. Render's SPA rewrite must serve index.html for these frontend routes.
+returns to sign-in. The build emits matching directory entry pages for these routes,
+so direct visits and refreshes work even without a dashboard SPA rewrite. The Blueprint
+also declares the usual index.html rewrite for future routes.
 
 The backend Dockerfile installs Tesseract and its English model. Render must use the
 Docker runtime, root directory `backend`, Dockerfile `./Dockerfile`, and the image's

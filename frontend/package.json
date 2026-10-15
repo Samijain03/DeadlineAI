@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/static-routes.mjs",
     "lint": "eslint .",
     "test:auth": "node tests/navigation.test.mjs && node scripts/test-auth-flow.mjs",
     "preview": "vite preview"
