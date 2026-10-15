@@ -49,6 +49,25 @@ an explicit unavailable error when no SMTP sender is configured. Render may rest
 outbound SMTP on free services; use a production HTTP email backend or an eligible
 service plan. Never use the console email backend in production (it logs reset links).
 
+### Resend sender setup on the existing Render backend
+
+1. Sign up at https://resend.com/signup and verify your account email.
+2. Add a domain you own at https://resend.com/domains and publish the DNS records
+   Resend provides. Wait until the sender domain is verified. A subdomain dedicated
+   to app email is suitable; the application itself can stay on onrender.com.
+3. Create a sending-only API key scoped to that domain. Save it directly in Render's
+   backend environment as `RESEND_API_KEY`; never put it in chat, Git or frontend env.
+4. Set `EMAIL_BACKEND=api.email_backend.ResendEmailBackend` and
+   `DEFAULT_FROM_EMAIL=DeadlineAI <notices@YOUR_VERIFIED_DOMAIN>`.
+   `FRONTEND_URL` must remain the deployed frontend origin.
+5. Redeploy, request a reset for your own DeadlineAI account, open the email while
+   signed out, choose a new password, then verify sign-in and reset-link single use.
+
+Without an owned domain, `onboarding@resend.dev` is limited to tests addressed to the
+Resend account owner's email. It is not a production sender for arbitrary students.
+The Render-provided onrender.com domain cannot be verified because its DNS is not yours.
+No real email is sent by the automated regression suite.
+
 ## Local development and checks
 
 Install Python requirements in a virtual environment and install Tesseract on PATH.
@@ -57,6 +76,7 @@ Run `npm ci` and `npm run dev` inside frontend. Set local environment variables 
 the `.env.example` files; never commit secrets. `DATABASE_URL` can be omitted for SQLite.
 
 Backend checks: `python manage.py test api --noinput`.
+Authentication screen regressions: `npm run test:auth` inside frontend.
 Frontend: `npm run build`; lint the active `src/redesign`, `src/auth`, `src/services`
 modules. The old frontend files remain in the repository but are not shipped by main.jsx.
 

@@ -19,6 +19,18 @@ from .services.ai_service import analyze_notice_text
 from .permissions import IsAdminOrReadOnly
 
 
+def log_activity(action, subject=''):
+    AuditLog.objects.create(action=action, notice_title=str(subject)[:200], status='Success')
+
+
+def refresh_deadline_status(deadline):
+    if deadline.status != 'Completed':
+        expected = 'Missed' if deadline.due_date < timezone.localdate() else 'Upcoming'
+        if deadline.status != expected:
+            deadline.status = expected
+            deadline.save(update_fields=['status'])
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def health_view(request):
@@ -37,6 +49,19 @@ class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [IsAdminOrReadOnly]
+
+    def perform_create(self, serializer):
+        category = serializer.save()
+        log_activity('Category created', category.name)
+
+    def perform_update(self, serializer):
+        category = serializer.save()
+        log_activity('Category updated', category.name)
+
+    def perform_destroy(self, instance):
+        name = instance.name
+        instance.delete()
+        log_activity('Category deleted', name)
 
 
 class NoticeViewSet(viewsets.ModelViewSet):
@@ -142,14 +167,18 @@ class DeadlineViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def perform_create(self, serializer):
         deadline = serializer.save(user=self.request.user)
+        refresh_deadline_status(deadline)
         self.save_notice_details(deadline)
         sync_reminder(deadline)
+        log_activity('Task created', deadline.title)
 
     @transaction.atomic
     def perform_update(self, serializer):
         deadline = serializer.save()
+        refresh_deadline_status(deadline)
         self.save_notice_details(deadline)
         sync_reminder(deadline)
+        log_activity('Task updated', deadline.title)
 
     def save_notice_details(self, deadline):
         if deadline.notice_id is None:
@@ -202,16 +231,20 @@ class DeadlineViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def perform_destroy(self, instance):
         notice = instance.notice
+        title = instance.title
         instance.delete()
         if notice and not notice.deadlines.exists():
             notice.delete()
+        log_activity('Task deleted', title)
 
     @action(detail=True, methods=['patch'], url_path='toggle-status')
     def toggle_status(self, request, pk=None):
         deadline = self.get_object()
         deadline.status = 'Upcoming' if deadline.status == 'Completed' else 'Completed'
         deadline.save()
+        refresh_deadline_status(deadline)
         sync_reminder(deadline)
+        log_activity('Task status changed', deadline.title)
         return Response(DeadlineSerializer(deadline).data)
 
     @action(detail=True, methods=['post'], url_path='toggle-reminder')
@@ -220,6 +253,7 @@ class DeadlineViewSet(viewsets.ModelViewSet):
         deadline.reminder_set = not deadline.reminder_set
         deadline.save(update_fields=['reminder_set'])
         sync_reminder(deadline)
+        log_activity('Reminder preference changed', deadline.title)
         return Response({'reminder_set': deadline.reminder_set})
 
 
@@ -286,8 +320,8 @@ def analytics_summary_view(request):
     deadlines = Deadline.objects.filter(user=request.user)
     total = deadlines.count()
     completed = deadlines.filter(status='Completed').count()
-    upcoming = deadlines.filter(status='Upcoming').count()
-    high_priority = deadlines.filter(priority='High', status='Upcoming').count()
+    upcoming = deadlines.exclude(status='Completed').filter(due_date__gte=timezone.localdate()).count()
+    high_priority = deadlines.exclude(status='Completed').filter(priority='High', due_date__gte=timezone.localdate()).count()
     reminders_count = Reminder.objects.filter(user=request.user, status='Active').count()
 
     categories = deadlines.values('category').annotate(count=Count('id'))
@@ -304,7 +338,7 @@ def analytics_summary_view(request):
         "active_reminders": reminders_count,
         "category_distribution": cat_breakdown,
         "system_status": "Operational",
-        "ocr_engine": "PyTesseract & Gemini LLM Active"
+        "ocr_engine": "Tesseract OCR; AI uses configured provider with local fallback"
     })
 
 
@@ -330,6 +364,7 @@ class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'error': 'is_active must be true or false.'}, status=400)
         user.is_active = active
         user.save(update_fields=['is_active'])
+        log_activity('User access restored' if active else 'User access disabled', f'User {user.pk}')
         return Response(UserSerializer(user).data)
 
 

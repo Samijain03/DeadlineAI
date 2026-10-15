@@ -121,38 +121,13 @@ def extract_with_heuristic_nlp(raw_text):
 
     # Priority Detection
     priority = "Medium"
-    if category in ["Examination", "Placement"] or "strict" in text_lower or "late submission" in text_lower:
+    if category in ["Examination", "Fees", "Placement"] or "strict" in text_lower or "late submission" in text_lower:
         priority = "High"
     elif category in ["Events", "General"]:
         priority = "Low"
 
-    # Date Extraction (e.g. 28th August 2026, 28 August 2026, 2026-08-28, 5th September 2026)
-    due_date = ""
-    date_patterns = [
-        r'(\d{1,2})(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})',
-        r'(\d{4})-(\d{2})-(\d{2})',
-        r'(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})'
-    ]
-    
-    months = {
-        'january': '01', 'february': '02', 'march': '03', 'april': '04',
-        'may': '05', 'june': '06', 'july': '07', 'august': '08',
-        'september': '09', 'october': '10', 'november': '11', 'december': '12'
-    }
-
-    match_named = re.search(date_patterns[0], text_lower)
-    if match_named:
-        d, m, y = match_named.groups()
-        due_date = f"{y}-{months.get(m, '08')}-{int(d):02d}"
-    else:
-        match_iso = re.search(date_patterns[1], text)
-        if match_iso:
-            due_date = match_iso.group(0)
-        else:
-            match_numeric = re.search(date_patterns[2], text)
-            if match_numeric:
-                d, m, y = match_numeric.groups()
-                due_date = f'{y}-{int(m):02d}-{int(d):02d}'
+    from .deadline_parser import extract_deadline
+    due_date, due_time = extract_deadline(text)
 
     # Title Extraction
     lines = [l.strip() for l in text.split('\n') if l.strip()]
@@ -188,7 +163,7 @@ def extract_with_heuristic_nlp(raw_text):
         "category": category,
         "action_required": action_required,
         "due_date": due_date,
-        "due_time": "",
+        "due_time": due_time,
         "priority": priority,
         "eligibility": eligibility,
         "confidence": 60.0,

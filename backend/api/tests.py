@@ -15,6 +15,59 @@ from .services.ai_service import extract_with_heuristic_nlp
 from datetime import timedelta
 from django.utils import timezone
 
+class CompletionRegressionTests(TestCase):
+    def test_fallback_selects_deadline_not_issue_date(self):
+        from .services.deadline_parser import extract_deadline
+        self.assertEqual(extract_deadline('Issued: 1 October 2026 at 09:00\nSubmit by 21 Oct 2026 at 5:30 PM.'), ('2026-10-21', '17:30'))
+        self.assertEqual(extract_deadline('Notice issued on 1 October 2026')[0], '')
+        self.assertEqual(extract_deadline('Deadline: 21 October 2026\nDeadline: 22 October 2026')[0], '')
+        self.assertEqual(extract_deadline('Submit by 31 February 2026')[0], '')
+        self.assertEqual(extract_deadline('Submit by 21/10/2026 at 17:00'), ('2026-10-21', '17:00'))
+
+    def test_resend_delivery_and_sanitized_failure(self):
+        from django.test import override_settings
+        from django.core.mail import send_mail
+        with override_settings(EMAIL_BACKEND='api.email_backend.ResendEmailBackend', RESEND_API_KEY='test-key', DEFAULT_FROM_EMAIL='notices@example.com'):
+            with patch('api.email_backend.requests.post') as post:
+                post.return_value.ok = True
+                self.assertEqual(send_mail('Reset', 'Synthetic body', None, ['student@example.com']), 1)
+                self.assertEqual(post.call_args.args[0], 'https://api.resend.com/emails')
+                self.assertEqual(post.call_args.kwargs['timeout'], 10)
+                post.return_value.ok = False
+                with self.assertRaisesRegex(RuntimeError, '^Email delivery is temporarily unavailable.$'):
+                    send_mail('Reset', 'Synthetic body', None, ['student@example.com'])
+
+    def test_missing_sender_reports_unavailable_without_sending(self):
+        from django.test import override_settings
+        from django.core.cache import cache
+        cache.clear()
+        with override_settings(EMAIL_BACKEND='api.email_backend.ResendEmailBackend', RESEND_API_KEY=''):
+            with patch('api.email_backend.requests.post') as post:
+                response = APIClient().post('/api/account/forgot-password/', {'email':'completion@example.com'}, format='json')
+                self.assertEqual(response.status_code, 503)
+                post.assert_not_called()
+
+    def test_past_status_and_rescheduling_and_admin_categories(self):
+        from .models import AuditLog
+        user = User.objects.create_user(username='completion', password='UniquePassword43!')
+        client = APIClient()
+        client.force_authenticate(user)
+        task = client.post('/api/deadlines/', {'title':'Submission', 'action_required':'Submit assignment', 'due_date':(timezone.localdate() - timedelta(days=1)).isoformat()}, format='json')
+        self.assertEqual(task.status_code, 201)
+        self.assertEqual(task.data['status'], 'Missed')
+        path = f"/api/deadlines/{task.data['id']}/"
+        client.patch(path + 'toggle-status/', {}, format='json')
+        self.assertEqual(client.patch(path + 'toggle-status/', {}, format='json').data['status'], 'Missed')
+        changed = client.patch(path, {'due_date':(timezone.localdate() + timedelta(days=3)).isoformat()}, format='json')
+        self.assertEqual(changed.data['status'], 'Upcoming')
+        self.assertTrue(AuditLog.objects.filter(action='Task updated').exists())
+        self.assertEqual(client.post('/api/categories/', {'name':'Research'}, format='json').status_code, 403)
+        user.is_staff = True
+        user.save()
+        self.assertEqual(client.post('/api/categories/', {'name':'Research'}, format='json').status_code, 201)
+        self.assertTrue(AuditLog.objects.filter(action='Category created', notice_title='Research').exists())
+
+
 class DeadlineAPITestCase(TestCase):
     def setUp(self):
         self.client = APIClient()

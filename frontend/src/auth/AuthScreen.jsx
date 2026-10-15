@@ -14,7 +14,7 @@ export default function AuthScreen() {
   const [mode, setMode] = useState('signin');
   const [form, setForm] = useState({ email: '', password: '', name: '', studentPrn: '', department: departments[0] });
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(auth.notice || '');
   const [error, setError] = useState('');
 
   const update = (field, value) => setForm(current => ({ ...current, [field]: value }));

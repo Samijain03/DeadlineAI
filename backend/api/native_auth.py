@@ -19,6 +19,7 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from .models import UserProfile
+from .email_backend import email_ready
 
 
 class AuthThrottle(AnonRateThrottle):
@@ -123,16 +124,18 @@ def me(request):
 def forgot_password(request):
     form = serializers.EmailField()
     email = form.run_validation(request.data.get('email', '')).lower()
-    if not settings.EMAIL_HOST and settings.EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
+    if not email_ready():
         return Response({'error': 'Password-reset email is not configured yet. Contact the administrator.'}, status=503)
     user = User.objects.filter(username=email, is_active=True).first()
     if user and user.has_usable_password():
         query = urlencode({'reset-password': '1', 'uid': urlsafe_base64_encode(force_bytes(user.pk)),
                            'token': default_token_generator.make_token(user)})
         try:
-            send_mail('Reset your DeadlineAI password',
+            delivered = send_mail('Reset your DeadlineAI password',
                       f'Reset your password using this link within one hour:\n{settings.FRONTEND_URL}/?{query}\n\nIf you did not request this, ignore this email.',
                       settings.DEFAULT_FROM_EMAIL, [user.email])
+            if not delivered:
+                raise RuntimeError('Email was not accepted for delivery.')
         except Exception:
             return Response({'error': 'Password-reset email is temporarily unavailable.'}, status=503)
     return Response({'message': 'If that account exists, a reset link has been sent.'})

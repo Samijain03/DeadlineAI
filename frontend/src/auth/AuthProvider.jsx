@@ -6,6 +6,7 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(getSession);
   const [loading, setLoading] = useState(!!getSession());
   const [recovering, setRecovering] = useState(new URLSearchParams(window.location.search).has('reset-password'));
+  const [notice, setNotice] = useState('');
   useEffect(() => {
     let mounted = true;
     const changed = () => setSession(getSession());
@@ -26,7 +27,8 @@ export function AuthProvider({ children }) {
       return data;
     });
     return {
-      configured: true, loading, recovering, session, user: session?.user || null,
+      configured: true, loading, recovering, notice, session, user: session?.user || null,
+      cancelRecovery: () => { setRecovering(false); window.history.replaceState({}, '', window.location.pathname); },
       signIn: (email, password) => authenticate('login', { email, password }),
       signUp: details => authenticate('register', details),
       signOut: async () => { const current = getSession(); saveSession(null); if (current) await accountRequest('logout', { refresh_token: current.refresh_token }).catch(() => {}); },
@@ -35,9 +37,10 @@ export function AuthProvider({ children }) {
         const query = new URLSearchParams(window.location.search);
         const data = await accountRequest('reset-password', { uid: query.get('uid'), token: query.get('token'), password });
         saveSession(null); setRecovering(false); window.history.replaceState({}, '', window.location.pathname);
+        setNotice('Password updated. Sign in with your new password.');
         return data;
       }),
     };
-  }, [loading, session, recovering]);
+  }, [loading, session, recovering, notice]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
