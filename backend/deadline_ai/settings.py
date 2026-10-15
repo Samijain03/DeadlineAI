@@ -164,3 +164,8 @@ SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
 # Google Gemini API Configuration
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 GEMINI_TIMEOUT_MS = int(os.environ.get('GEMINI_TIMEOUT_MS', '8000'))
+
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
+GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', '')
+GOOGLE_TOKEN_ENCRYPTION_KEY = os.environ.get('GOOGLE_TOKEN_ENCRYPTION_KEY', '')

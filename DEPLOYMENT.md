@@ -96,3 +96,9 @@ correct the deadline, save with reminder, reload, download the original, edit th
 filter it by category/date/priority, complete/reopen it, then delete the test task.
 Verify a second user cannot read the task or original file. Password reset must be
 completed by the account owner using the email link.
+
+## Google Calendar and email imports
+
+See GOOGLE_INTEGRATIONS.md for the free email-import workflow, Google OAuth setup,
+server-only environment variables, privacy information and live acceptance steps.
+The OAuth client must enable Google Calendar API and use the exact backend callback URL.

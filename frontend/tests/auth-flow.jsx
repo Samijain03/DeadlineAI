@@ -26,8 +26,10 @@ export function verifyAuthScreens() {
     if (!protectedPage.includes('Welcome back.') || protectedPage.includes('Your notices. Made clearer.')) throw new Error('Signed-out users cannot enter the workspace.');
     const success = render('/login', { notice: 'Password updated. Sign in with your new password.' });
     if (!success.includes('Password updated.')) throw new Error('A successful reset must explain the next step.');
+    const privacy = render('/privacy');
+    if (!privacy.includes('What DeadlineAI uses.') || !privacy.includes('Google Calendar')) throw new Error('Google connection privacy information must be public.');
     const missing = render('/missing-page');
     if (!missing.includes('Back to home')) throw new Error('Unknown routes need a way back home.');
-    return '8 landing, authentication and protected-route regressions passed';
+    return '9 landing, authentication and protected-route regressions passed';
   } finally { globalThis.window = previousWindow; }
 }

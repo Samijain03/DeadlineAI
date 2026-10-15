@@ -17,6 +17,7 @@ from .serializers import (
 from .services.ocr_service import process_document_ocr
 from .services.ai_service import analyze_notice_text
 from .permissions import IsAdminOrReadOnly
+from .services.google_calendar import sync_deadline, remove_deadline
 
 
 def log_activity(action, subject=''):
@@ -179,6 +180,7 @@ class DeadlineViewSet(viewsets.ModelViewSet):
         self.save_notice_details(deadline)
         sync_reminder(deadline)
         log_activity('Task updated', deadline.title)
+        sync_deadline(deadline.pk)
 
     def save_notice_details(self, deadline):
         if deadline.notice_id is None:
@@ -232,6 +234,7 @@ class DeadlineViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         notice = instance.notice
         title = instance.title
+        remove_deadline(instance.pk)
         instance.delete()
         if notice and not notice.deadlines.exists():
             notice.delete()
@@ -245,6 +248,7 @@ class DeadlineViewSet(viewsets.ModelViewSet):
         refresh_deadline_status(deadline)
         sync_reminder(deadline)
         log_activity('Task status changed', deadline.title)
+        sync_deadline(deadline.pk)
         return Response(DeadlineSerializer(deadline).data)
 
     @action(detail=True, methods=['post'], url_path='toggle-reminder')
@@ -254,6 +258,7 @@ class DeadlineViewSet(viewsets.ModelViewSet):
         deadline.save(update_fields=['reminder_set'])
         sync_reminder(deadline)
         log_activity('Reminder preference changed', deadline.title)
+        sync_deadline(deadline.pk)
         return Response({'reminder_set': deadline.reminder_set})
 
 

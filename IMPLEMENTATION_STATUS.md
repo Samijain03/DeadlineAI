@@ -34,7 +34,7 @@ must register again. No unrelated Supabase projects were paused.
 
 ## Explicit future scope
 
-WhatsApp/email/college-portal ingestion, Google Calendar synchronization, multilingual
+WhatsApp/automatic mailbox/college-portal ingestion and multilingual
 notices, native mobile app, voice assistant, classroom boards, duplicate/update detection
 and personalized eligibility remain expansion items. Existing Q&A only looks up relevant
 source sentences and does not invent answers.
@@ -46,3 +46,12 @@ on the next visit; external email/WhatsApp/push reminders are not enabled. Origi
 are private database bytes, so storage usage grows with uploads. Authentication tests cover
 registration validation, duplicate PRNs, token rotation, logout, disabled accounts and
 single-use password resets. Resend test delivery is configured and owner-tested; without a verified domain it is limited to the Resend account email.
+
+## Added integrations (15 October 2026)
+
+Email ingestion now accepts selected bodies/attachments from .eml files, with preview,
+review and duplicate detection. Google Calendar one-way sync is implemented using an
+app-created calendar, encrypted OAuth tokens and retryable event updates/removals.
+Google live acceptance requires the owner's OAuth client configuration and consent;
+see GOOGLE_INTEGRATIONS.md. These are not claims of automatic mailbox monitoring or
+two-way Calendar synchronization.

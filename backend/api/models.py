@@ -135,6 +135,48 @@ class Reminder(models.Model):
         return f"Reminder: {self.title} via {self.channel}"
 
 
+class GoogleCalendarConnection(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='google_calendar')
+    google_subject = models.CharField(max_length=255)
+    account_email = models.EmailField()
+    tokens_encrypted = models.TextField()
+    calendar_id = models.CharField(max_length=512, blank=True)
+    last_error = models.CharField(max_length=255, blank=True)
+    connected_at = models.DateTimeField(auto_now_add=True)
+
+
+class GoogleOAuthAttempt(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    state_hash = models.CharField(max_length=64, unique=True)
+    verifier_encrypted = models.TextField()
+    completion_hash = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    result_encrypted = models.TextField(blank=True)
+    expires_at = models.DateTimeField()
+
+
+class CalendarEventLink(models.Model):
+    connection = models.ForeignKey(GoogleCalendarConnection, on_delete=models.CASCADE, related_name='links')
+    deadline = models.OneToOneField(Deadline, on_delete=models.SET_NULL, null=True, related_name='calendar_link')
+    event_id = models.CharField(max_length=255)
+    calendar_id = models.CharField(max_length=512, blank=True)
+    event_url = models.URLField(max_length=2048, blank=True)
+    pending_delete = models.BooleanField(default=False)
+    last_synced = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=255, blank=True)
+
+
+class EmailIngestion(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    fingerprint = models.CharField(max_length=64)
+    part_key = models.CharField(max_length=40)
+    notice = models.OneToOneField(Notice, on_delete=models.CASCADE)
+    extracted_data = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['user', 'fingerprint', 'part_key'], name='unique_email_part_per_user')]
+
+
 class AuditLog(models.Model):
     action = models.CharField(max_length=100)
     notice_title = models.CharField(max_length=255)

@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import native_auth
+from . import integration_views as integrations
 from .views import (
     AdminUserViewSet, admin_summary, AuthViewSet, CategoryViewSet, NoticeViewSet,
     DeadlineViewSet, ReminderViewSet, AuditLogViewSet,
@@ -17,6 +18,15 @@ router.register(r'reminders', ReminderViewSet, basename='reminders')
 router.register(r'audit-logs', AuditLogViewSet, basename='audit-logs')
 
 urlpatterns = [
+    path('integrations/calendar/', integrations.calendar_status),
+    path('integrations/google/connect/', integrations.calendar_connect),
+    path('integrations/google/callback/', integrations.google_callback),
+    path('integrations/google/complete/', integrations.google_complete),
+    path('integrations/google/disconnect/', integrations.calendar_disconnect),
+    path('integrations/calendar/tasks/<int:deadline_id>/sync/', integrations.calendar_share),
+    path('integrations/calendar/links/<int:link_id>/', integrations.calendar_link),
+    path('integrations/email/preview/', integrations.email_preview),
+    path('integrations/email/analyze/', integrations.email_analyze),
     path('account/register/', native_auth.register),
     path('account/login/', native_auth.login),
     path('account/refresh/', native_auth.refresh),
